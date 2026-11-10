@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>AIR BODY GYM 予約</title>
+<meta name="description" content="AIR BODY GYM のパーソナルトレーニング予約ページ。空いている時間を選んで、アカウントなしで予約できます。">
+<meta name="theme-color" content="#0E6B62">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1 class="brand" id="studioName">AIR BODY GYM</h1>
+      <p class="sub" id="studioSub">完全予約制のパーソナルトレーニング</p>
+    </div>
+    <div class="who" id="who"></div>
+  </header>
+
+  <nav role="tablist" id="tabs">
+    <button role="tab" data-tab="book" aria-selected="true">予約する</button>
+    <button role="tab" data-tab="mine" aria-selected="false">マイページ</button>
+    <button role="tab" data-tab="plans" aria-selected="false">プラン・料金</button>
+  </nav>
+
+  <div id="banner" class="note" hidden></div>
+
+  <!-- 予約完了 -->
+  <div class="sheet" id="done" hidden>
+    <h2>予約が完了しました</h2>
+    <div class="when" id="doneWhen"></div>
+    <p class="sub" style="margin:0">下のURLがあなた専用のマイページです。予約の確認・キャンセル、チケットの残り回数の確認に使います。<b>ブックマークするか、メモ帳などに保存してください。</b>他の人には教えないでください。</p>
+    <div class="urlbox"><input id="doneUrl" readonly aria-label="マイページURL"><button class="btn sm" id="doneCopy" type="button">コピー</button></div>
+    <div class="row"><button class="btn ghost" id="doneMore" type="button">続けて予約する</button><button class="btn" id="doneMine" type="button">マイページを見る</button></div>
+  </div>
+
+  <!-- 予約する -->
+  <section class="tab" id="tab-book">
+    <div><p class="label">トレーナー</p><div class="chips" id="trainers"><span class="loading">読み込み中…</span></div></div>
+    <div><p class="label">日付</p><div class="days" id="days"></div></div>
+    <div>
+      <p class="label" id="boardLabel">時間</p>
+      <div class="board" id="board"></div>
+      <div class="legend">
+        <span><i style="background:var(--surface)"></i>空き</span>
+        <span><i style="background:var(--mine-soft);border-color:var(--mine)"></i>あなたの予約</span>
+        <span><i style="background:transparent"></i>満席・終了</span>
+      </div>
+    </div>
+    <form class="sheet" id="form" hidden>
+      <div><h3>予約内容の確認</h3><div class="when" id="formWhen"></div></div>
+      <div class="field"><span class="flabel">お支払い方法</span><div class="pays" id="pays"></div></div>
+      <div class="lines" id="lines"></div>
+      <div class="total"><span>お支払い金額（税込）</span><b id="total">0円</b></div>
+      <div class="field"><label for="f-name">お名前</label><input id="f-name" required autocomplete="name" placeholder="山田 花子"></div>
+      <div class="field"><label for="f-phone">電話番号またはメール</label><input id="f-phone" required autocomplete="tel" placeholder="090-1234-5678"><small>ジムからの連絡にだけ使います</small></div>
+      <div class="field"><label for="f-note">体調・けが・目的など（任意）</label><textarea id="f-note" placeholder="例：腰痛があるので無理のない内容にしてほしい"></textarea><small>体調不良やけががある場合は必ずお知らせください</small></div>
+      <div class="row"><button type="button" class="btn ghost" id="formCancel">戻る</button><button type="submit" class="btn" id="formSubmit">予約を確定する</button></div>
+      <p class="sub">予約の変更・キャンセルは前日23:59までマイページからできます。当日キャンセル・無断キャンセルは1回分消化となります。</p>
+    </form>
+  </section>
+
+  <!-- マイページ -->
+  <section class="tab" id="tab-mine" hidden>
+    <div id="mineIntro"></div>
+    <div id="myPassSummary"></div>
+    <div id="upWrap"><p class="label">これからの予約</p><div class="list" id="mineList"></div></div>
+    <div id="histWrap" hidden><p class="label">利用履歴</p><div class="list" id="histList"></div></div>
+    <div id="mineUrlWrap" hidden class="sheet">
+      <h3>あなたのマイページURL</h3>
+      <div class="urlbox"><input id="mineUrl" readonly aria-label="マイページURL"><button class="btn sm" id="mineCopy" type="button">コピー</button></div>
+      <button class="btn ghost sm" id="forget" type="button" style="align-self:flex-start">この端末からマイページを外す</button>
+    </div>
+  </section>
+
+  <!-- プラン・料金 -->
+  <section class="tab" id="tab-plans" hidden>
+    <div id="myPasses"></div>
+    <div id="planGroups" style="display:flex;flex-direction:column;gap:18px"></div>
+    <form class="sheet" id="applyForm" hidden>
+      <div><h3>プランの申し込み</h3><div class="when" id="applyWhat"></div></div>
+      <p class="sub" style="margin:0">料金は事前支払いです。お支払い方法はジムからご案内します。入金を確認したあと、ジムがチケットを有効にします。有効期限は有効になった日から数えます。</p>
+      <div class="row">
+        <div class="field"><label for="a-name">お名前</label><input id="a-name" required autocomplete="name"></div>
+        <div class="field"><label for="a-phone">電話番号またはメール</label><input id="a-phone" required autocomplete="tel"></div>
+      </div>
+      <div class="row"><button type="button" class="btn ghost" id="applyCancel">戻る</button><button type="submit" class="btn" id="applySubmit">申し込む</button></div>
+    </form>
+    <div class="pgroup">
+      <h3>トレーナー指名料</h3>
+      <p class="sub" style="margin:0">指名は任意です。指名した場合のみ、1回ごとにかかります。</p>
+      <table class="fees" id="feeTable"></table>
+    </div>
+    <details>
+      <summary>注意事項</summary>
+      <h4>料金・支払いについて</h4>
+      <ul><li>表示料金はすべて税込です。</li><li>料金は事前支払いとなります。</li><li>回数券・コース料金の返金は原則不可となります。</li><li>有効期限を過ぎた回数券はご利用いただけません。</li></ul>
+      <h4>予約・キャンセルについて</h4>
+      <ul><li>完全予約制となっております。</li><li>予約の変更・キャンセルは前日0時までにご連絡ください。</li><li>当日キャンセル・無断キャンセルは1回分消化となります。</li><li>遅刻された場合でも終了時間の延長はできません。</li></ul>
+      <h4>トレーニングについて</h4>
+      <ul><li>トレーニング内容はお客様の体調・目的に合わせて行います。</li><li>体調不良や怪我がある場合は事前にお知らせください。</li><li>医師から運動制限を受けている方はご利用いただけません。</li><li>無理な重量・危険なフォームでのトレーニングは行いません。</li></ul>
+      <h4>持ち物・服装について</h4>
+      <ul><li>タオル・飲み物・トレーニングウェアはレンタル可能です。</li><li>室内シューズが必要な方はご持参ください。</li></ul>
+      <h4>その他</h4>
+      <ul><li>ジム内での事故・怪我については応急対応のみとし、責任は負いかねます。</li><li>スタッフの指示に従っていただけない場合、利用をお断りすることがあります。</li><li>施設・器具の破損があった場合、修理費をご負担いただく場合があります。</li></ul>
+    </details>
+  </section>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="assets/common.js"></script>
+<script>
+(function () {
+const { sb, WD, $, esc, pad, yen, jstNow, ymd, today, parseYmd, fmtDate, fmtShort, hm, startOf, toast, banner, copy, myPageUrl, errText } = APP;
+const TOKEN_KEY = "airbody_token";
+
+let settings = null, trainers = [], ranks = [], plans = [], busy = [], me = null;
+let token = null;
+let sel = { trainer: "any", date: null, time: null, pay: null, plan: null };
+
+/* ---------- マイページのトークン ---------- */
+(function () {
+  const q = new URLSearchParams(location.search).get("me");
+  if (q && /^[0-9a-f-]{36}$/i.test(q)) token = q;
+  if (!token) { try { token = localStorage.getItem(TOKEN_KEY); } catch (e) {} }
+  if (token) { try { localStorage.setItem(TOKEN_KEY, token); } catch (e) {} }
+})();
+function setToken(t) { token = t; try { localStorage.setItem(TOKEN_KEY, t); } catch (e) {} }
+
+/* ---------- タブ ---------- */
+$("tabs").addEventListener("click", (e) => { const b = e.target.closest("button[data-tab]"); if (b) showTab(b.dataset.tab); });
+function showTab(name) {
+  document.querySelectorAll("#tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === name));
+  ["book", "mine", "plans"].forEach((n) => ($("tab-" + n).hidden = n !== name));
+  $("done").hidden = true;
+}
+
+/* ---------- 読み込み ---------- */
+const rankOf = (id) => ranks.find((r) => r.id === id) || { label: "", fee: 0 };
+const trainerById = (id) => trainers.find((t) => t.id === id);
+async function loadMaster() {
+  const [s, t, r, p] = await Promise.all([
+    sb.from("settings").select("*").eq("id", 1).single(),
+    sb.from("trainers").select("*").eq("active", true).order("sort").order("created_at"),
+    sb.from("ranks").select("*").order("sort"),
+    sb.from("plans").select("*").eq("active", true).order("sort"),
+  ]);
+  if (s.error || t.error || r.error || p.error) throw s.error || t.error || r.error || p.error;
+  settings = s.data; trainers = t.data; ranks = r.data; plans = p.data;
+  $("studioName").textContent = settings.name;
+  document.title = settings.name + " 予約";
+  $("studioSub").textContent = `完全予約制 ・ ${settings.open_hour}:00〜${settings.close_hour}:00 ・ 1枠${settings.slot_minutes}分`;
+}
+async function loadBusy() {
+  const from = today(), d = parseYmd(from); d.setDate(d.getDate() + settings.days_ahead);
+  const { data, error } = await sb.rpc("get_busy", { p_from: from, p_to: ymd(d) });
+  if (error) throw error;
+  busy = data.map((b) => b.on_date + "_" + hm(b.start_time) + "_" + b.trainer_id);
+}
+async function loadMe() {
+  if (!token) { me = null; return; }
+  const { data, error } = await sb.rpc("my_page", { p_token: token });
+  if (error) throw error;
+  me = data;
+  if (!me) { try { localStorage.removeItem(TOKEN_KEY); } catch (e) {} token = null; banner("マイページURLが正しくないようです。URLをもう一度確認してください。", true); }
+}
+
+/* ---------- 枠 ---------- */
+function daysList() { const out = []; const t = parseYmd(today()); for (let i = 0; i < settings.days_ahead; i++) { const d = new Date(t); d.setDate(t.getDate() + i); out.push(d); } return out; }
+function isClosed(d) { return (settings.closed_weekdays || []).includes(d.getDay()) || (settings.closed_dates || []).includes(ymd(d)); }
+function times() { const out = [], L = settings.slot_minutes; for (let m = settings.open_hour * 60; m + L <= settings.close_hour * 60; m += L) out.push({ h: pad(Math.floor(m / 60)) + ":" + pad(m % 60), end: pad(Math.floor((m + L) / 60)) + ":" + pad((m + L) % 60) }); return out; }
+function workingOn(date) { const wd = parseYmd(date).getDay(); return trainers.filter((t) => !(t.off_weekdays || []).includes(wd)); }
+function candidates(date) { const w = workingOn(date); return sel.trainer === "any" ? w : w.filter((t) => t.id === sel.trainer); }
+function freeTrainers(date, h) { return candidates(date).filter((t) => !busy.includes(date + "_" + h + "_" + t.id)); }
+function myAt(date, h) { return me && me.bookings.some((b) => !b.status && b.on_date === date && b.start_time === h); }
+function timeState(date, h) {
+  if (myAt(date, h)) return "mine";
+  if (startOf(date, h) <= jstNow()) return "past";
+  return freeTrainers(date, h).length ? "free" : "taken";
+}
+
+/* ---------- 予約する ---------- */
+function renderTrainers() {
+  if (sel.trainer !== "any" && !trainerById(sel.trainer)) sel.trainer = "any";
+  $("trainers").innerHTML = [`<button type="button" class="chip" data-t="any" aria-pressed="${sel.trainer === "any"}">指名なし</button>`]
+    .concat(trainers.map((t) => { const r = rankOf(t.rank_id); return `<button type="button" class="chip" data-t="${esc(t.id)}" aria-pressed="${sel.trainer === t.id}">${esc(t.name)}<small>${esc(r.label)} +${yen(r.fee)}</small></button>`; })).join("");
+}
+$("trainers").addEventListener("click", (e) => { const b = e.target.closest(".chip"); if (!b) return; sel.trainer = b.dataset.t; sel.time = null; renderBook(); });
+function renderDays() {
+  const ds = daysList(), ok = (d) => !isClosed(d) && candidates(ymd(d)).length;
+  if (!sel.date || !ds.some((d) => ymd(d) === sel.date && ok(d))) { const f = ds.find((d) => ok(d) && times().some((t) => timeState(ymd(d), t.h) === "free")) || ds.find(ok); sel.date = f ? ymd(f) : null; }
+  $("days").innerHTML = ds.map((d) => { const k = ymd(d), off = !ok(d); const free = !off && times().some((t) => timeState(k, t.h) === "free");
+    return `<button type="button" class="day ${d.getDay() === 6 ? "sat" : d.getDay() === 0 ? "sun" : ""}" data-d="${k}" aria-pressed="${k === sel.date}" ${off ? "disabled" : ""} aria-label="${fmtDate(k)}${off ? " 休み" : free ? " 空きあり" : " 満席"}"><span class="dw">${WD[d.getDay()]}</span><span class="dn">${d.getDate()}</span><span class="dm">${off ? "休" : d.getMonth() + 1 + "月"}</span><span class="dot ${free ? "" : "none"}"></span></button>`; }).join("");
+}
+$("days").addEventListener("click", (e) => { const b = e.target.closest(".day"); if (!b || b.disabled) return; sel.date = b.dataset.d; sel.time = null; renderBook(); });
+function renderBoard() {
+  if (!sel.date) { $("boardLabel").textContent = "時間"; $("board").innerHTML = `<div class="empty" style="grid-column:1/-1">${sel.trainer === "any" ? "予約できる日がありません" : "このトレーナーが予約を受けられる日がありません"}</div>`; return; }
+  $("boardLabel").textContent = fmtDate(sel.date) + "の時間";
+  $("board").innerHTML = times().map((t) => { const st = timeState(sel.date, t.h); const lbl = { free: "空き", taken: "満席", past: "終了", mine: "予約済み" }[st];
+    return `<button type="button" class="slot ${st}" data-h="${t.h}" aria-pressed="${sel.time === t.h}" ${st === "free" ? "" : "disabled"}><span class="t">${t.h}</span><span class="s">${lbl}</span></button>`; }).join("") || `<div class="empty" style="grid-column:1/-1">予約枠がありません</div>`;
+}
+$("board").addEventListener("click", (e) => { const b = e.target.closest(".slot"); if (!b || b.disabled) return; sel.time = b.dataset.h; renderBoard(); renderForm(); $("form").scrollIntoView({ behavior: "smooth", block: "nearest" }); });
+
+function payOptions(date) {
+  const opts = [];
+  for (const p of (me && me.passes) || []) {
+    if (p.left > 0 && date >= p.starts_on && date <= p.expires_on) opts.push({ v: "pass:" + p.id, label: p.label + "を使う", sub: `残り${p.left}回 → ${p.left - 1}回 ・ 期限 ${fmtShort(p.expires_on)}`, due: 0 });
+  }
+  if (!me || me.trial_eligible) opts.push({ v: "trial", label: "初回体験", sub: "初めての方限定", due: settings.trial_price });
+  opts.push({ v: "single", label: "都度払い", sub: "1回ごとのお支払い", due: settings.single_price });
+  return opts;
+}
+function nomFee() { return sel.trainer === "any" ? 0 : rankOf((trainerById(sel.trainer) || {}).rank_id).fee; }
+function renderForm() {
+  const f = $("form");
+  if (!sel.time || timeState(sel.date, sel.time) !== "free") { f.hidden = true; sel.time = null; return; }
+  f.hidden = false;
+  const t = times().find((x) => x.h === sel.time);
+  $("formWhen").textContent = fmtDate(sel.date) + " " + sel.time + "〜" + (t ? t.end : "") + " ・ " + (sel.trainer === "any" ? "トレーナー指名なし" : trainerById(sel.trainer).name + "を指名");
+  const opts = payOptions(sel.date);
+  if (!opts.some((o) => o.v === sel.pay)) sel.pay = opts[0].v;
+  $("pays").innerHTML = opts.map((o, i) => `<label class="pay"><input type="radio" name="pay" id="pay-${i}" value="${esc(o.v)}" ${o.v === sel.pay ? "checked" : ""}><b>${esc(o.label)}</b><em>${o.due ? yen(o.due) : "チケット1回"}</em><span>${esc(o.sub)}</span></label>`).join("");
+  const o = opts.find((x) => x.v === sel.pay), fee = nomFee();
+  $("lines").innerHTML = `<div><span>${esc(o.label.replace("を使う", ""))}</span><span>${o.due ? yen(o.due) : "0円（チケット使用）"}</span></div>` + (fee ? `<div><span>指名料（${esc(rankOf(trainerById(sel.trainer).rank_id).label)}トレーナー）</span><span>${yen(fee)}</span></div>` : "");
+  $("total").textContent = yen(o.due + fee);
+  if (me) { if (!$("f-name").value) $("f-name").value = me.name || ""; if (!$("f-phone").value) $("f-phone").value = me.contact || ""; }
+}
+$("pays").addEventListener("change", (e) => { if (e.target.name === "pay") { sel.pay = e.target.value; renderForm(); } });
+$("formCancel").addEventListener("click", () => { sel.time = null; renderBook(); });
+function renderBook() { renderTrainers(); renderDays(); renderBoard(); renderForm(); }
+
+$("form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const name = $("f-name").value.trim(), contact = $("f-phone").value.trim(), note = $("f-note").value.trim();
+  if (!name || !contact) { toast("お名前と連絡先を入力してください"); return; }
+  const date = sel.date, h = sel.time, pay = sel.pay;
+  const btn = $("formSubmit"); btn.disabled = true; btn.textContent = "予約しています…";
+  try {
+    const { data, error } = await sb.rpc("book", {
+      p_token: token, p_name: name, p_contact: contact, p_date: date, p_time: h,
+      p_trainer: sel.trainer === "any" ? null : sel.trainer,
+      p_pay: pay.startsWith("pass:") ? "pass" : pay, p_pass: pay.startsWith("pass:") ? pay.slice(5) : null, p_note: note,
+    });
+    if (error) throw error;
+    setToken(data.token);
+    $("f-note").value = ""; sel.time = null;
+    await Promise.all([loadBusy(), loadMe()]);
+    const b = me && me.bookings.find((x) => x.id === data.booking_id);
+    $("doneWhen").textContent = fmtDate(date) + " " + h + (b ? " ・ 担当 " + b.trainer : "");
+    $("doneUrl").value = myPageUrl(data.token);
+    renderAll();
+    $("done").hidden = false; $("done").scrollIntoView({ behavior: "smooth", block: "start" });
+  } catch (err) {
+    toast(errText(err));
+    await loadBusy().catch(() => {}); sel.time = null; renderBook();
+  } finally { btn.disabled = false; btn.textContent = "予約を確定する"; }
+});
+$("doneCopy").addEventListener("click", () => copy($("doneUrl").value, $("doneUrl")));
+$("doneMore").addEventListener("click", () => { $("done").hidden = true; });
+$("doneMine").addEventListener("click", () => showTab("mine"));
+
+/* ---------- マイページ ---------- */
+const pending = new Set();
+const payLabel = (b) => b.pay_type === "pass" ? (b.pass_label || "チケット") : b.pay_type === "trial" ? "初回体験" : "都度払い";
+const canSelfCancel = (b) => today() < b.on_date;
+function passCard(p) {
+  const expired = today() > p.expires_on, w = (x) => (p.total ? ((x / p.total) * 100).toFixed(1) + "%" : "0");
+  return `<div class="pass"><div class="top"><b>${esc(p.label)}</b><span class="pill ${expired ? "warn" : ""}">${expired ? "期限切れ" : "期限 " + fmtShort(p.expires_on)}</span></div>
+    <div class="left">${p.left}<small> 回残り（全${p.total}回${p.bonus ? "・うち無料" + p.bonus + "回" : ""}）</small></div>
+    <div class="meter" aria-hidden="true"><i class="u" style="width:${w(p.used)}"></i><i class="h" style="width:${w(p.held)}"></i></div>
+    <div class="sub" style="margin:0">利用済み${p.used}回・予約中${p.held}回</div></div>`;
+}
+function renderMine() {
+  if (!me) {
+    $("mineIntro").innerHTML = `<div class="empty">予約をすると、あなた専用のマイページURLが発行されます。<br>以前に予約した方は、保存しておいたマイページURLを開いてください。</div>`;
+    ["myPassSummary"].forEach((id) => ($(id).innerHTML = ""));
+    $("upWrap").hidden = true; $("histWrap").hidden = true; $("mineUrlWrap").hidden = true; return;
+  }
+  $("mineIntro").innerHTML = `<p class="sub" style="margin:0">${esc(me.name)} さまのマイページ</p>`;
+  $("upWrap").hidden = false; $("mineUrlWrap").hidden = false; $("mineUrl").value = myPageUrl(token);
+  const active = me.passes.filter((p) => today() <= p.expires_on);
+  $("myPassSummary").innerHTML = active.length ? `<div class="list">${active.map(passCard).join("")}</div>` : "";
+  const now = jstNow();
+  const up = me.bookings.filter((b) => !b.status && startOf(b.on_date, b.start_time).getTime() + settings.slot_minutes * 60000 > now.getTime());
+  $("mineList").innerHTML = up.length ? up.map((b) => {
+    let act;
+    if (!canSelfCancel(b)) act = `<span class="dd">当日のキャンセルはジムへ直接ご連絡ください（1回分消化）</span>`;
+    else act = pending.has(b.id) ? `<button class="btn sm danger" data-yes="${esc(b.id)}">予約を取り消す</button><button class="btn sm ghost" data-no="${esc(b.id)}">やめる</button>` : `<button class="btn sm ghost" data-ask="${esc(b.id)}">キャンセル</button>`;
+    const due = (b.price || 0) + (b.fee || 0);
+    return `<div class="item"><div><div class="tm">${esc(b.start_time)}</div><div class="dt">${fmtDate(b.on_date)}</div></div><div class="meta"><div class="nm">${esc(b.trainer)}${b.nominated ? ' <span class="pill mine">指名</span>' : ""}</div><div class="dd">${esc(payLabel(b))}${due ? " ・ お支払い " + yen(due) : ""}</div>${b.note ? `<div class="dd">${esc(b.note)}</div>` : ""}</div><div class="acts">${act}</div></div>`;
+  }).join("") : `<div class="empty">これからの予約はありません。「予約する」から空いている時間を選んでください。</div>`;
+  const hist = me.bookings.filter((b) => b.status).reverse().slice(0, 10);
+  $("histWrap").hidden = !hist.length;
+  $("histList").innerHTML = hist.map((b) => `<div class="item"><div><div class="tm">${esc(b.start_time)}</div><div class="dt">${fmtDate(b.on_date)}</div></div><div class="meta"><div class="nm">${esc(b.trainer)}</div><div class="dd"><span class="pill ${b.status === "late" ? "warn" : ""}">${b.status === "late" ? "当日・無断キャンセル（消化）" : "受講済み"}</span>${esc(payLabel(b))}</div></div></div>`).join("");
+}
+$("mineList").addEventListener("click", async (e) => { const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.ask) { pending.add(b.dataset.ask); renderMine(); return; }
+  if (b.dataset.no) { pending.delete(b.dataset.no); renderMine(); return; }
+  if (b.dataset.yes) { b.disabled = true;
+    const { error } = await sb.rpc("cancel_booking", { p_token: token, p_id: b.dataset.yes });
+    if (error) { toast(errText(error)); b.disabled = false; return; }
+    pending.delete(b.dataset.yes); toast("予約をキャンセルしました");
+    await Promise.all([loadBusy(), loadMe()]); renderAll(); }
+});
+$("mineCopy").addEventListener("click", () => copy($("mineUrl").value, $("mineUrl")));
+$("forget").addEventListener("click", () => {
+  if (!$("forget").dataset.sure) { $("forget").dataset.sure = "1"; $("forget").textContent = "本当に外す（URLを保存していない場合は確認できなくなります）"; return; }
+  try { localStorage.removeItem(TOKEN_KEY); } catch (e) {}
+  location.href = location.pathname;
+});
+
+/* ---------- プラン・料金 ---------- */
+function renderPlans() {
+  let mine = "";
+  if (me) {
+    const live = me.passes.filter((p) => today() <= p.expires_on);
+    if (live.length || me.applications.length) mine = `<div class="pgroup"><h3>ご利用中のプラン</h3>${live.map(passCard).join("")}${me.applications.map((a) => `<div class="note">${esc(a.label)}を申し込み済みです。入金確認後に有効になります。</div>`).join("")}</div>`;
+  }
+  $("myPasses").innerHTML = mine;
+  const btn = (p) => `<button type="button" class="btn sm ${sel.plan === p.id ? "" : "ghost"} pa" data-plan="${esc(p.id)}">${sel.plan === p.id ? "選択中" : "申し込む"}</button>`;
+  const card = (p) => `<div class="plan" ${sel.plan === p.id ? 'aria-current="true"' : ""}><span class="pn">${esc(p.label)}</span><span class="pp">${yen(p.price)}${p.grp === "monthly" ? "<small style='font-size:12px'>/月</small>" : ""}</span><span class="pd">1回あたり${yen(p.per)}${p.bonus ? " ・ " + p.bonus + "セッション無料" : ""}</span><span class="pd">${p.grp === "monthly" ? "毎月4回まで" : "有効期限 " + p.months + "ヶ月"}</span>${btn(p)}</div>`;
+  $("planGroups").innerHTML =
+    `<div class="pgroup"><h3>初回体験</h3><div class="plan"><span class="pn">初回体験</span><span class="pp">${yen(settings.trial_price)}</span><span class="pd">初めての方は1回だけこの料金で受けられます。予約時に選べます。</span></div></div>` +
+    `<div class="pgroup"><h3>チケット制 <span class="badge">人気 No.1</span></h3>${plans.filter((p) => p.grp === "ticket").map(card).join("")}</div>` +
+    `<div class="pgroup"><h3>月額定額制</h3>${plans.filter((p) => p.grp === "monthly").map(card).join("")}</div>` +
+    `<div class="pgroup"><h3>都度払い</h3><div class="plan"><span class="pn">都度払い</span><span class="pp">${yen(settings.single_price)}</span><span class="pd">1回ごとにお支払い。予約時に選べます。</span></div></div>`;
+  $("feeTable").innerHTML = ranks.map((r) => `<tr><td>${esc(r.label)}トレーナー</td><td>${yen(r.fee)}/回</td></tr>`).join("");
+  const f = $("applyForm");
+  if (!sel.plan) { f.hidden = true; return; }
+  const p = plans.find((x) => x.id === sel.plan); f.hidden = false;
+  $("applyWhat").textContent = p.label + " " + yen(p.price) + (p.grp === "monthly" ? "/月" : "");
+  if (me) { if (!$("a-name").value) $("a-name").value = me.name || ""; if (!$("a-phone").value) $("a-phone").value = me.contact || ""; }
+}
+$("planGroups").addEventListener("click", (e) => { const b = e.target.closest("[data-plan]"); if (!b) return; sel.plan = b.dataset.plan; renderPlans(); $("applyForm").scrollIntoView({ behavior: "smooth", block: "nearest" }); });
+$("applyCancel").addEventListener("click", () => { sel.plan = null; renderPlans(); });
+$("applyForm").addEventListener("submit", async (e) => { e.preventDefault();
+  const name = $("a-name").value.trim(), contact = $("a-phone").value.trim();
+  if (!name || !contact) { toast("お名前と連絡先を入力してください"); return; }
+  const p = plans.find((x) => x.id === sel.plan), btn = $("applySubmit"); btn.disabled = true;
+  const { data, error } = await sb.rpc("apply_plan", { p_token: token, p_name: name, p_contact: contact, p_plan: p.id });
+  btn.disabled = false;
+  if (error) { toast(errText(error)); return; }
+  const isNew = !token; setToken(data.token); sel.plan = null;
+  await loadMe(); renderAll();
+  toast(p.label + "を申し込みました。ジムからお支払いのご案内があります");
+  if (isNew) { $("doneWhen").textContent = p.label + "を申し込みました"; $("doneUrl").value = myPageUrl(data.token); $("done").hidden = false; $("done").scrollIntoView({ behavior: "smooth" }); }
+});
+
+function renderAll() { renderBook(); renderMine(); renderPlans(); $("who").textContent = me ? me.name + " さま" : ""; }
+
+/* ---------- 起動 ---------- */
+(async () => {
+  try {
+    await loadMaster();
+    await Promise.all([loadBusy(), loadMe()]);
+    renderAll();
+    if (new URLSearchParams(location.search).get("me") && me) showTab("mine");
+  } catch (e) {
+    $("trainers").innerHTML = "";
+    banner("予約情報を読み込めませんでした。通信状況を確認して、ページを開き直してください。", true);
+  }
+  setInterval(async () => { if (document.hidden || !settings) return; try { await loadBusy(); renderBook(); } catch (e) {} }, 60000);
+})();
+})();
+</script>
+</body>
+</html>

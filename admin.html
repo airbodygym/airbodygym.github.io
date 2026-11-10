@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>AIR BODY GYM 管理</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#16201E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1 class="brand" id="studioName">AIR BODY GYM</h1>
+      <p class="sub">トレーナー用の管理画面</p>
+    </div>
+    <div class="who" id="who"></div>
+  </header>
+  <div id="banner" class="note" hidden></div>
+
+  <!-- ログイン -->
+  <form class="sheet" id="login" hidden>
+    <h2 id="loginTitle">ログイン</h2>
+    <div class="field"><label for="l-email">メールアドレス</label><input id="l-email" type="email" autocomplete="username" required></div>
+    <div class="field"><label for="l-pass">パスワード</label><input id="l-pass" type="password" autocomplete="current-password" minlength="8" required><small id="passHint" hidden>8文字以上</small></div>
+    <button class="btn" type="submit" id="loginBtn">ログイン</button>
+    <button class="btn ghost sm" type="button" id="toggleSignup" style="align-self:flex-start">はじめて使う（オーナー登録）</button>
+    <p class="sub" id="signupNote" hidden style="margin:0">最初に登録した1人だけがオーナー（管理者）になります。登録後に届く確認メールのリンクを押してから、ここでログインしてください。</p>
+  </form>
+
+  <div id="app" hidden style="display:flex;flex-direction:column;gap:18px">
+    <nav role="tablist" id="tabs">
+      <button role="tab" data-tab="admin" aria-selected="true">予約一覧</button>
+      <button role="tab" data-tab="cust" aria-selected="false">お客さん</button>
+      <button role="tab" data-tab="settings" aria-selected="false">設定</button>
+    </nav>
+
+    <section class="tab" id="tab-admin">
+      <div class="stats" id="stats"></div>
+      <div class="row"><a class="btn ghost sm" id="openSite" href="./" target="_blank" rel="noopener" style="flex:0 0 auto">お客さん用ページを開く</a><button class="btn ghost sm" id="reload" type="button" style="flex:0 0 auto">最新にする</button></div>
+      <div id="adminList"><p class="loading">読み込み中…</p></div>
+    </section>
+
+    <section class="tab" id="tab-cust" hidden>
+      <div class="field"><label for="c-search">お客さんを探す</label><input id="c-search" placeholder="名前・電話番号で絞り込み"></div>
+      <div class="list" id="custList"></div>
+    </section>
+
+    <form id="tab-settings" class="sheet" hidden>
+      <div class="field"><label for="s-name">ジム名</label><input id="s-name"></div>
+      <div class="row">
+        <div class="field"><label for="s-open">営業開始</label><select id="s-open"></select></div>
+        <div class="field"><label for="s-close">最終枠の終了</label><select id="s-close"></select></div>
+        <div class="field"><label for="s-len">1枠の長さ</label><select id="s-len"><option value="30">30分</option><option value="45">45分</option><option value="60">60分</option><option value="90">90分</option></select></div>
+      </div>
+      <div class="field"><span class="flabel">定休日</span><div class="wk" id="s-wk"></div></div>
+      <div class="field"><label for="s-closed">臨時休業日</label><input id="s-closed" placeholder="2026-11-03, 2026-12-31"><small>カンマ区切りで日付を入力</small></div>
+      <div class="field"><label for="s-ahead">何日先まで予約できるか</label><input id="s-ahead" type="number" min="1" max="60"></div>
+      <div class="field"><span class="flabel">トレーナー</span><small>ランクで指名料が決まります。チェックした曜日はそのトレーナーの休みです。</small>
+        <div id="trEdit" style="display:flex;flex-direction:column;gap:10px;margin-top:6px"></div>
+        <button type="button" class="btn ghost sm" id="trAdd" style="align-self:flex-start">トレーナーを追加</button>
+      </div>
+      <button class="btn" type="submit" id="saveSettings">設定を保存</button>
+      <button class="btn ghost sm" type="button" id="logout" style="align-self:flex-start">ログアウト</button>
+    </form>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="assets/common.js"></script>
+<script>
+(function () {
+const { sb, WD, $, esc, pad, yen, jstNow, ymd, today, parseYmd, fmtDate, fmtShort, hm, startOf, toast, banner, copy, myPageUrl, errText } = APP;
+let settings = null, trainers = [], ranks = [], plans = [], open = [], customers = [], usage = [];
+const apending = new Set();
+
+/* ---------- ログイン ---------- */
+let signup = false;
+$("toggleSignup").addEventListener("click", () => {
+  signup = !signup;
+  $("loginTitle").textContent = signup ? "オーナー登録" : "ログイン";
+  $("loginBtn").textContent = signup ? "登録する" : "ログイン";
+  $("toggleSignup").textContent = signup ? "ログインに戻る" : "はじめて使う（オーナー登録）";
+  $("signupNote").hidden = !signup; $("passHint").hidden = !signup;
+  $("l-pass").autocomplete = signup ? "new-password" : "current-password";
+});
+$("login").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const email = $("l-email").value.trim(), password = $("l-pass").value;
+  $("loginBtn").disabled = true;
+  try {
+    if (signup) {
+      const { data, error } = await sb.auth.signUp({ email, password, options: { emailRedirectTo: location.origin + location.pathname } });
+      if (error) throw error;
+      if (data.session) await enter();
+      else banner("確認メールを送りました。メールのリンクを押してから、ここでログインしてください。");
+    } else {
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      await enter();
+    }
+  } catch (err) {
+    const m = (err && err.message) || "";
+    banner(m.includes("Invalid login") ? "メールアドレスかパスワードが違います。" : m.includes("Email not confirmed") ? "確認メールのリンクをまだ押していないようです。メールを確認してください。" : m.includes("already registered") ? "このメールアドレスは登録済みです。ログインしてください。" : "うまくいきませんでした：" + m, true);
+  } finally { $("loginBtn").disabled = false; }
+});
+$("logout").addEventListener("click", async () => { await sb.auth.signOut(); location.reload(); });
+
+async function enter() {
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) { $("login").hidden = false; $("app").hidden = true; return; }
+  const { data: adm } = await sb.from("admins").select("user_id").eq("user_id", user.id).maybeSingle();
+  if (!adm) { $("login").hidden = false; $("app").hidden = true; banner("このアカウントには管理者の権限がありません。オーナーのアカウントでログインしてください。", true); await sb.auth.signOut(); return; }
+  banner(""); $("login").hidden = true; $("app").hidden = false; $("who").textContent = user.email;
+  await loadAll();
+}
+
+/* ---------- タブ ---------- */
+$("tabs").addEventListener("click", (e) => { const b = e.target.closest("button[data-tab]"); if (b) showTab(b.dataset.tab); });
+function showTab(name) {
+  document.querySelectorAll("#tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === name));
+  ["admin", "cust", "settings"].forEach((n) => ($("tab-" + n).hidden = n !== name));
+  if (name === "settings") fillSettingsForm();
+}
+
+/* ---------- 読み込み ---------- */
+const rankOf = (id) => ranks.find((r) => r.id === id) || { label: "", fee: 0 };
+async function loadAll() {
+  const [s, t, r, p, b, c, u] = await Promise.all([
+    sb.from("settings").select("*").eq("id", 1).single(),
+    sb.from("trainers").select("*").order("sort").order("created_at"),
+    sb.from("ranks").select("*").order("sort"),
+    sb.from("plans").select("*").order("sort"),
+    sb.from("bookings").select("*, customers(name,contact,token), trainers(name), passes(label)").is("status", null).order("on_date").order("start_time"),
+    sb.from("customers").select("*, passes(*), applications(*)").order("created_at", { ascending: false }),
+    sb.from("bookings").select("customer_id,pass_id,status"),
+  ]);
+  const err = [s, t, r, p, b, c, u].find((x) => x.error);
+  if (err) { banner("読み込めませんでした。ページを開き直してください。", true); return; }
+  settings = s.data; trainers = t.data; ranks = r.data; plans = p.data; open = b.data; customers = c.data; usage = u.data;
+  $("studioName").textContent = settings.name;
+  renderAdmin(); renderCust();
+}
+$("reload").addEventListener("click", async () => { await loadAll(); toast("最新の状態にしました"); });
+
+/* ---------- 予約一覧 ---------- */
+const endOf = (b) => new Date(startOf(b.on_date, b.start_time).getTime() + settings.slot_minutes * 60000);
+const payLabel = (b) => b.pay_type === "pass" ? ((b.passes && b.passes.label) || "チケット") : b.pay_type === "trial" ? "初回体験" : "都度払い";
+function rowHtml(b, mode) {
+  const ask = (act, label, cls) => { const k = b.id + "|" + act; return apending.has(k) ? `<button class="btn sm ${cls || ""}" data-go="${k}">${label}を確定</button><button class="btn sm ghost" data-stop="${k}">やめる</button>` : `<button class="btn sm ghost" data-ask="${k}">${label}</button>`; };
+  let acts = "";
+  if (mode === "past") acts = ask("done", "受講済み") + ask("late", "無断キャンセル（消化）", "danger") + ask("void", "取消（消化なし）", "danger");
+  else acts = (today() >= b.on_date ? ask("late", "当日キャンセル（消化）", "danger") : "") + ask("void", "取消（消化なし）", "danger");
+  const due = (b.price || 0) + (b.fee || 0), c = b.customers || {};
+  return `<div class="item"><div><div class="tm">${hm(b.start_time)}</div><div class="dt">${esc(b.trainers && b.trainers.name)}</div></div><div class="meta"><div class="nm">${esc(c.name)} ${b.nominated ? '<span class="pill mine">指名</span>' : ""}</div><div class="dd">${esc(c.contact)}</div><div class="dd">${esc(payLabel(b))}${due ? " ・ 受け取り " + yen(due) : ""}</div>${b.note ? `<div class="dd">メモ：${esc(b.note)}</div>` : ""}</div><div class="acts">${acts}</div></div>`;
+}
+function renderAdmin() {
+  const now = jstNow();
+  const past = open.filter((b) => endOf(b) <= now), up = open.filter((b) => endOf(b) > now);
+  const wk = new Date(now); wk.setDate(now.getDate() + 7);
+  $("stats").innerHTML = `<div class="stat"><b>${up.filter((b) => b.on_date === today()).length}</b><span>今日の予約</span></div><div class="stat"><b>${up.filter((b) => startOf(b.on_date, b.start_time) < wk).length}</b><span>7日以内</span></div><div class="stat"><b>${past.length}</b><span>受講の記録待ち</span></div>`;
+  let html = "";
+  if (past.length) {
+    html += `<div class="dayhead">受講の記録待ち<span>${past.length}件</span></div><p class="sub" style="margin:0 0 6px">終わったセッションです。記録するとチケットの回数が確定します。</p>`;
+    html += apending.has("ALL") ? `<div class="row" style="margin-bottom:8px"><button class="btn sm" data-allgo="1">${past.length}件を受講済みにする</button><button class="btn sm ghost" data-allstop="1">やめる</button></div>` : `<div class="row" style="margin-bottom:8px"><button class="btn sm ghost" data-all="1">すべて受講済みにする</button></div>`;
+    html += `<div class="list">${past.map((b) => `<div><div class="dt" style="font-size:12px;color:var(--muted)">${fmtDate(b.on_date)}</div>${rowHtml(b, "past")}</div>`).join("")}</div>`;
+  }
+  const g = {}; up.forEach((b) => (g[b.on_date] = g[b.on_date] || []).push(b));
+  for (const [d, rs] of Object.entries(g)) html += `<div class="dayhead">${fmtDate(d)}${d === today() ? "・今日" : ""}<span>${rs.length}件</span></div><div class="list">${rs.map((b) => rowHtml(b, "up")).join("")}</div>`;
+  if (!up.length) html += `<div class="empty" style="margin-top:12px">これからの予約はまだありません。お客さんが予約すると、ここに日付順で並びます。</div>`;
+  $("adminList").innerHTML = html;
+}
+async function settle(id, kind) {
+  const q = kind === "void" ? sb.from("bookings").delete().eq("id", id) : sb.from("bookings").update({ status: kind, settled_at: new Date().toISOString() }).eq("id", id);
+  const { error } = await q; if (error) throw error;
+}
+$("adminList").addEventListener("click", async (e) => { const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.ask) { apending.add(b.dataset.ask); renderAdmin(); return; }
+  if (b.dataset.stop) { apending.delete(b.dataset.stop); renderAdmin(); return; }
+  if (b.dataset.all) { apending.add("ALL"); renderAdmin(); return; }
+  if (b.dataset.allstop) { apending.delete("ALL"); renderAdmin(); return; }
+  if (b.dataset.allgo) { b.disabled = true; const ids = open.filter((x) => endOf(x) <= jstNow()).map((x) => x.id);
+    const { error } = await sb.from("bookings").update({ status: "done", settled_at: new Date().toISOString() }).in("id", ids);
+    apending.delete("ALL"); toast(error ? "保存できませんでした。もう一度お試しください。" : ids.length + "件を受講済みにしました"); await loadAll(); return; }
+  if (b.dataset.go) { const [id, act] = b.dataset.go.split("|"); b.disabled = true;
+    try { await settle(id, act); apending.delete(b.dataset.go);
+      toast(act === "done" ? "受講済みにしました" : act === "late" ? "1回分を消化してキャンセルしました" : "予約を取り消しました。お客さんへの連絡もお忘れなく"); }
+    catch (err) { toast("保存できませんでした。もう一度お試しください。"); }
+    await loadAll(); }
+});
+
+/* ---------- お客さん ---------- */
+function passLeft(p) { const n = usage.filter((u) => u.pass_id === p.id).length; return p.sessions + p.bonus - n; }
+function renderCust() {
+  const q = ($("c-search").value || "").trim().toLowerCase();
+  const list = customers.filter((c) => !q || (c.name + " " + c.contact).toLowerCase().includes(q));
+  if (!list.length) { $("custList").innerHTML = `<div class="empty">${customers.length ? "条件に合うお客さんはいません" : "まだお客さんはいません。予約やプランの申し込みがあると、ここに表示されます。"}</div>`; return; }
+  const pend = (c) => c.applications.some((a) => a.status === "pending");
+  list.sort((a, b) => pend(b) - pend(a));
+  $("custList").innerHTML = list.map((c) => {
+    const visits = usage.filter((u) => u.customer_id === c.id && u.status === "done").length;
+    const apps = c.applications.filter((a) => a.status === "pending").map((a) => { const pl = plans.find((p) => p.id === a.plan_id) || {}; const k = c.id + "|" + a.id + "|" + a.plan_id;
+      return `<div class="mini"><span><span class="pill warn">申込</span>${esc(pl.label)} ${yen(pl.price)}</span><span class="row" style="flex:0 0 auto">${apending.has("A" + k) ? `<button class="btn sm" data-ago="${k}">入金確認済みで有効にする</button><button class="btn sm ghost" data-astop="${k}">やめる</button>` : `<button class="btn sm" data-aask="${k}">有効にする</button><button class="btn sm ghost" data-arej="${esc(a.id)}">取り下げ</button>`}</span></div>`; }).join("");
+    const passes = c.passes.filter((p) => today() <= p.expires_on).map((p) => `<div class="mini"><span>${esc(p.label)}</span><span><b style="font-family:var(--mono)">${passLeft(p)}</b>/${p.sessions + p.bonus}回 ・ 期限 ${fmtShort(p.expires_on)}</span></div>`).join("");
+    return `<div class="cust"><div class="hd"><b>${esc(c.name)}</b><span class="sm">受講${visits}回</span></div><div class="sm">${esc(c.contact)}</div>${apps}${passes}
+      <div class="mini"><label for="add-${c.id}" class="sm">プランを追加（店頭で支払い済み）</label><span class="row" style="flex:1 1 220px"><select id="add-${c.id}">${plans.filter((p) => p.active).map((p) => `<option value="${esc(p.id)}">${esc(p.label)} ${yen(p.price)}</option>`).join("")}</select><button class="btn sm ghost" data-add="${c.id}" style="flex:0 0 auto">追加</button></span></div>
+      <div class="mini"><span class="sm">マイページURL（お客さんに再送するとき）</span><button class="btn sm ghost" data-url="${esc(c.token)}">コピー</button></div></div>`;
+  }).join("");
+}
+$("c-search").addEventListener("input", renderCust);
+$("custList").addEventListener("click", async (e) => { const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.url) { copy(myPageUrl(b.dataset.url)); return; }
+  if (b.dataset.aask) { apending.add("A" + b.dataset.aask); renderCust(); return; }
+  if (b.dataset.astop) { apending.delete("A" + b.dataset.astop); renderCust(); return; }
+  if (b.dataset.ago) { const [cid, aid, plan] = b.dataset.ago.split("|"); b.disabled = true;
+    const { error } = await sb.rpc("grant_pass", { p_customer: cid, p_plan: plan, p_application: aid });
+    apending.delete("A" + b.dataset.ago); toast(error ? errText(error) : "チケットを有効にしました"); await loadAll(); return; }
+  if (b.dataset.arej) { b.disabled = true;
+    const { error } = await sb.from("applications").update({ status: "withdrawn", decided_at: new Date().toISOString() }).eq("id", b.dataset.arej);
+    toast(error ? "保存できませんでした。" : "申し込みを取り下げました"); await loadAll(); return; }
+  if (b.dataset.add) { const cid = b.dataset.add, plan = $("add-" + cid).value; b.disabled = true;
+    const { error } = await sb.rpc("grant_pass", { p_customer: cid, p_plan: plan, p_application: null });
+    toast(error ? errText(error) : plans.find((p) => p.id === plan).label + "を追加しました"); await loadAll(); }
+});
+
+/* ---------- 設定 ---------- */
+(function () { const o = [], c = []; for (let h = 5; h <= 23; h++) o.push(`<option value="${h}">${h}:00</option>`); for (let h = 6; h <= 24; h++) c.push(`<option value="${h}">${h}:00</option>`); $("s-open").innerHTML = o.join(""); $("s-close").innerHTML = c.join("");
+  $("s-wk").innerHTML = WD.map((w, i) => `<label><input type="checkbox" id="s-wk-${i}">${w}</label>`).join(""); })();
+let trEdit = [];
+function renderTrEdit() {
+  $("trEdit").innerHTML = trEdit.map((t) => `<div class="trrow">
+    <div class="field"><label for="tr-n-${t.key}">名前</label><input id="tr-n-${t.key}" value="${esc(t.name)}"></div>
+    <div class="field"><label for="tr-r-${t.key}">ランク</label><select id="tr-r-${t.key}">${ranks.map((r) => `<option value="${r.id}" ${r.id === t.rank_id ? "selected" : ""}>${esc(r.label)}（+${yen(r.fee)}）</option>`).join("")}</select></div>
+    <button type="button" class="btn sm ghost" data-rm="${t.key}" ${trEdit.length < 2 ? "disabled" : ""}>削除</button>
+    <div class="wk">${WD.map((w, i) => `<label><input type="checkbox" id="tr-o-${t.key}-${i}" ${(t.off_weekdays || []).includes(i) ? "checked" : ""}>${w}休</label>`).join("")}</div></div>`).join("");
+}
+function syncTr() { trEdit = trEdit.map((t) => ({ ...t, name: ($("tr-n-" + t.key).value || "").trim(), rank_id: $("tr-r-" + t.key).value, off_weekdays: WD.map((_, i) => i).filter((i) => $("tr-o-" + t.key + "-" + i).checked) })); }
+$("trAdd").addEventListener("click", () => { syncTr(); trEdit.push({ key: "n" + Date.now(), id: null, name: "", rank_id: "standard", off_weekdays: [] }); renderTrEdit(); });
+$("trEdit").addEventListener("click", (e) => { const b = e.target.closest("[data-rm]"); if (!b) return; syncTr(); trEdit = trEdit.filter((t) => t.key !== b.dataset.rm); renderTrEdit(); });
+function fillSettingsForm() {
+  if (!settings) return;
+  $("s-name").value = settings.name; $("s-open").value = settings.open_hour; $("s-close").value = settings.close_hour; $("s-len").value = settings.slot_minutes;
+  WD.forEach((_, i) => ($("s-wk-" + i).checked = (settings.closed_weekdays || []).includes(i)));
+  $("s-closed").value = (settings.closed_dates || []).join(", "); $("s-ahead").value = settings.days_ahead;
+  trEdit = trainers.filter((t) => t.active).map((t) => ({ ...t, key: t.id })); renderTrEdit();
+}
+$("tab-settings").addEventListener("submit", async (e) => { e.preventDefault(); syncTr();
+  const open_hour = +$("s-open").value, close_hour = +$("s-close").value, slot_minutes = +$("s-len").value;
+  if (close_hour * 60 < open_hour * 60 + slot_minutes) { toast("終了時刻は開始時刻より後にしてください"); return; }
+  if (!trEdit.length || trEdit.some((t) => !t.name)) { toast("トレーナーの名前を入力してください"); return; }
+  const btn = $("saveSettings"); btn.disabled = true;
+  try {
+    const s = await sb.from("settings").update({
+      name: $("s-name").value.trim() || "AIR BODY GYM", open_hour, close_hour, slot_minutes,
+      closed_weekdays: WD.map((_, i) => i).filter((i) => $("s-wk-" + i).checked),
+      closed_dates: $("s-closed").value.split(/[,、\s]+/).map((x) => x.trim()).filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x)),
+      days_ahead: Math.min(60, Math.max(1, +$("s-ahead").value || 14)), updated_at: new Date().toISOString(),
+    }).eq("id", 1);
+    if (s.error) throw s.error;
+    for (const [i, t] of trEdit.entries()) {
+      const row = { name: t.name, rank_id: t.rank_id, off_weekdays: t.off_weekdays, sort: i, active: true };
+      const r = t.id ? await sb.from("trainers").update(row).eq("id", t.id) : await sb.from("trainers").insert(row);
+      if (r.error) throw r.error;
+    }
+    const keep = trEdit.filter((t) => t.id).map((t) => t.id);
+    const removed = trainers.filter((t) => t.active && !keep.includes(t.id)).map((t) => t.id);
+    if (removed.length) { const r = await sb.from("trainers").update({ active: false }).in("id", removed); if (r.error) throw r.error; }
+    toast("設定を保存しました"); await loadAll(); fillSettingsForm();
+  } catch (err) { toast("保存できませんでした。もう一度お試しください。"); }
+  finally { btn.disabled = false; }
+});
+
+/* ---------- 起動 ---------- */
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) await enter(); else $("login").hidden = false;
+  setInterval(() => { if (!document.hidden && !$("app").hidden && !apending.size) loadAll(); }, 60000);
+})();
+})();
+</script>
+</body>
+</html>
