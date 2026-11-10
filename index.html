@@ -116,7 +116,7 @@
 <script src="assets/common.js"></script>
 <script>
 (function () {
-const { sb, WD, $, esc, pad, yen, jstNow, ymd, today, parseYmd, fmtDate, fmtShort, hm, startOf, toast, banner, copy, myPageUrl, errText, shiftOn, trainerOpen, shiftSummary } = APP;
+const { sb, WD, $, esc, pad, yen, jstNow, ymd, today, parseYmd, fmtDate, fmtShort, hm, startOf, toast, banner, copy, myPageUrl, errText, shiftOn, trainerOpen, fmtMin } = APP;
 const TOKEN_KEY = "airbody_token";
 
 let settings = null, trainers = [], ranks = [], plans = [], busy = [], me = null;
@@ -191,9 +191,11 @@ function renderTrainers() {
   if (sel.trainer !== "any" && !trainerById(sel.trainer)) sel.trainer = "any";
   $("trainers").innerHTML = [`<button type="button" class="chip" data-t="any" aria-pressed="${sel.trainer === "any"}">指名なし</button>`]
     .concat(trainers.map((t) => { const r = rankOf(t.rank_id); return `<button type="button" class="chip" data-t="${esc(t.id)}" aria-pressed="${sel.trainer === t.id}">${esc(t.name)}<small>${esc(r.label)} +${yen(r.fee)}</small></button>`; })).join("");
+}
+function renderTrainerInfo() {
   const t = trainerById(sel.trainer);
-  $("trainerInfo").hidden = !t;
-  if (t) $("trainerInfo").textContent = "勤務：" + shiftSummary(t, settings);
+  $("trainerInfo").hidden = !t || !sel.date;
+  if (t && sel.date) { const sh = shiftOn(t, sel.date, settings); $("trainerInfo").textContent = fmtDate(sel.date) + "の" + t.name + "：" + (sh ? fmtMin(sh.s) + "〜" + fmtMin(sh.e) : "お休み"); }
 }
 $("trainers").addEventListener("click", (e) => { const b = e.target.closest(".chip"); if (!b) return; sel.trainer = b.dataset.t; sel.time = null; renderBook(); });
 function renderDays() {
@@ -237,7 +239,7 @@ function renderForm() {
 }
 $("pays").addEventListener("change", (e) => { if (e.target.name === "pay") { sel.pay = e.target.value; renderForm(); } });
 $("formCancel").addEventListener("click", () => { sel.time = null; renderBook(); });
-function renderBook() { renderTrainers(); renderDays(); renderBoard(); renderForm(); }
+function renderBook() { renderTrainers(); renderDays(); renderTrainerInfo(); renderBoard(); renderForm(); }
 
 $("form").addEventListener("submit", async (e) => {
   e.preventDefault();

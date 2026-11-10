@@ -34,7 +34,10 @@ window.APP = (function () {
     for (let d = 0; d < 7; d++) out[d] = (t.off_weekdays || []).includes(d) ? null : { s: settings.open_hour * 60, e: settings.close_hour * 60 };
     return out;
   }
+  // 日付ごとのシフト（day_shifts）が最優先。なければ臨時休み、その次に曜日ごとの「いつもの勤務」。
+  const hasDay = (t, date) => !!t.day_shifts && Object.prototype.hasOwnProperty.call(t.day_shifts, date);
   function shiftOn(t, date, settings) {
+    if (hasDay(t, date)) { const d = t.day_shifts[date]; return d && typeof d === "object" ? d : null; }
     if ((t.off_dates || []).includes(date)) return null;
     const sh = weekSchedule(t, settings)[String(parseYmd(date).getDay())];
     return sh && typeof sh === "object" ? sh : null;
@@ -82,5 +85,5 @@ window.APP = (function () {
     for (const k of Object.keys(ERR)) if (m.includes(k)) return ERR[k];
     return fallback || "うまく保存できませんでした。通信状況を確認してもう一度お試しください。";
   }
-  return { sb, WD, $, esc, pad, yen, jstNow, ymd, today, parseYmd, fmtDate, fmtShort, hm, startOf, toast, banner, copy, myPageUrl, errText, toMin, fmtMin, weekSchedule, shiftOn, trainerOpen, shiftSummary };
+  return { sb, WD, $, esc, pad, yen, jstNow, ymd, today, parseYmd, fmtDate, fmtShort, hm, startOf, toast, banner, copy, myPageUrl, errText, toMin, fmtMin, weekSchedule, shiftOn, trainerOpen, shiftSummary, hasDay };
 })();
