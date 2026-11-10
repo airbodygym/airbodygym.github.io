@@ -60,7 +60,7 @@
       <div class="field"><span class="flabel">定休日</span><div class="wk" id="s-wk"></div></div>
       <div class="field"><label for="s-closed">臨時休業日</label><input id="s-closed" placeholder="2026-11-03, 2026-12-31"><small>カンマ区切りで日付を入力</small></div>
       <div class="field"><label for="s-ahead">何日先まで予約できるか</label><input id="s-ahead" type="number" min="1" max="60"></div>
-      <div class="field"><span class="flabel">トレーナー</span><small>ランクで指名料が決まります。チェックした曜日はそのトレーナーの休みです。</small>
+      <div class="field"><span class="flabel">トレーナー</span><small>トレーナーごとに指名料のランク・曜日ごとの勤務時間・臨時の休みを設定できます。お客さんの予約画面には、勤務時間内の枠だけが空きとして表示されます。</small>
         <div id="trEdit" style="display:flex;flex-direction:column;gap:10px;margin-top:6px"></div>
         <button type="button" class="btn ghost sm" id="trAdd" style="align-self:flex-start">トレーナーを追加</button>
       </div>
@@ -75,7 +75,7 @@
 <script src="assets/common.js"></script>
 <script>
 (function () {
-const { sb, WD, $, esc, pad, yen, jstNow, ymd, today, parseYmd, fmtDate, fmtShort, hm, startOf, toast, banner, copy, myPageUrl, errText } = APP;
+const { sb, WD, $, esc, pad, yen, jstNow, ymd, today, parseYmd, fmtDate, fmtShort, hm, startOf, toast, banner, copy, myPageUrl, errText, fmtMin, weekSchedule, trainerOpen } = APP;
 let settings = null, trainers = [], ranks = [], plans = [], open = [], customers = [], usage = [];
 const apending = new Set();
 
@@ -151,13 +151,14 @@ $("reload").addEventListener("click", async () => { await loadAll(); toast("最�
 /* ---------- 予約一覧 ---------- */
 const endOf = (b) => new Date(startOf(b.on_date, b.start_time).getTime() + settings.slot_minutes * 60000);
 const payLabel = (b) => b.pay_type === "pass" ? ((b.passes && b.passes.label) || "チケット") : b.pay_type === "trial" ? "初回体験" : "都度払い";
+function outOfShift(b) { const t = trainers.find((x) => x.id === b.trainer_id); return t ? !trainerOpen(t, b.on_date, hm(b.start_time), settings) : false; }
 function rowHtml(b, mode) {
   const ask = (act, label, cls) => { const k = b.id + "|" + act; return apending.has(k) ? `<button class="btn sm ${cls || ""}" data-go="${k}">${label}を確定</button><button class="btn sm ghost" data-stop="${k}">やめる</button>` : `<button class="btn sm ghost" data-ask="${k}">${label}</button>`; };
   let acts = "";
   if (mode === "past") acts = ask("done", "受講済み") + ask("late", "無断キャンセル（消化）", "danger") + ask("void", "取消（消化なし）", "danger");
   else acts = (today() >= b.on_date ? ask("late", "当日キャンセル（消化）", "danger") : "") + ask("void", "取消（消化なし）", "danger");
   const due = (b.price || 0) + (b.fee || 0), c = b.customers || {};
-  return `<div class="item"><div><div class="tm">${hm(b.start_time)}</div><div class="dt">${esc(b.trainers && b.trainers.name)}</div></div><div class="meta"><div class="nm">${esc(c.name)} ${b.nominated ? '<span class="pill mine">指名</span>' : ""}</div><div class="dd">${esc(c.contact)}</div><div class="dd">${esc(payLabel(b))}${due ? " ・ 受け取り " + yen(due) : ""}</div>${b.note ? `<div class="dd">メモ：${esc(b.note)}</div>` : ""}</div><div class="acts">${acts}</div></div>`;
+  return `<div class="item"><div><div class="tm">${hm(b.start_time)}</div><div class="dt">${esc(b.trainers && b.trainers.name)}</div></div><div class="meta"><div class="nm">${esc(c.name)} ${b.nominated ? '<span class="pill mine">指名</span>' : ""}${mode === "up" && outOfShift(b) ? '<span class="pill warn">勤務時間外</span>' : ""}</div><div class="dd">${esc(c.contact)}</div><div class="dd">${esc(payLabel(b))}${due ? " ・ 受け取り " + yen(due) : ""}</div>${b.note ? `<div class="dd">メモ：${esc(b.note)}</div>` : ""}</div><div class="acts">${acts}</div></div>`;
 }
 function renderAdmin() {
   const now = jstNow();
@@ -232,27 +233,57 @@ $("custList").addEventListener("click", async (e) => { const b = e.target.closes
 (function () { const o = [], c = []; for (let h = 5; h <= 23; h++) o.push(`<option value="${h}">${h}:00</option>`); for (let h = 6; h <= 24; h++) c.push(`<option value="${h}">${h}:00</option>`); $("s-open").innerHTML = o.join(""); $("s-close").innerHTML = c.join("");
   $("s-wk").innerHTML = WD.map((w, i) => `<label><input type="checkbox" id="s-wk-${i}">${w}</label>`).join(""); })();
 let trEdit = [];
+const TIME_OPTS = (() => { const o = []; for (let m = 5 * 60; m <= 24 * 60; m += 30) o.push(m); return o; })();
+const timeSelect = (id, val) => `<select id="${id}" aria-label="時刻">${TIME_OPTS.map((m) => `<option value="${m}" ${m === val ? "selected" : ""}>${fmtMin(m)}</option>`).join("")}</select>`;
+const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
+function defaultShift() { return { s: settings.open_hour * 60, e: settings.close_hour * 60 }; }
 function renderTrEdit() {
-  $("trEdit").innerHTML = trEdit.map((t) => `<div class="trrow">
-    <div class="field"><label for="tr-n-${t.key}">名前</label><input id="tr-n-${t.key}" value="${esc(t.name)}"></div>
-    <div class="field"><label for="tr-r-${t.key}">ランク</label><select id="tr-r-${t.key}">${ranks.map((r) => `<option value="${r.id}" ${r.id === t.rank_id ? "selected" : ""}>${esc(r.label)}（+${yen(r.fee)}）</option>`).join("")}</select></div>
-    <button type="button" class="btn sm ghost" data-rm="${t.key}" ${trEdit.length < 2 ? "disabled" : ""}>削除</button>
-    <div class="wk">${WD.map((w, i) => `<label><input type="checkbox" id="tr-o-${t.key}-${i}" ${(t.off_weekdays || []).includes(i) ? "checked" : ""}>${w}休</label>`).join("")}</div></div>`).join("");
+  $("trEdit").innerHTML = trEdit.map((t) => `<div class="trcard">
+    <div class="trhead">
+      <div class="field"><label for="tr-n-${t.key}">名前</label><input id="tr-n-${t.key}" value="${esc(t.name)}"></div>
+      <div class="field"><label for="tr-r-${t.key}">ランク（指名料）</label><select id="tr-r-${t.key}">${ranks.map((r) => `<option value="${r.id}" ${r.id === t.rank_id ? "selected" : ""}>${esc(r.label)}（+${yen(r.fee)}）</option>`).join("")}</select></div>
+      <button type="button" class="btn sm ghost" data-rm="${t.key}" ${trEdit.length < 2 ? "disabled" : ""}>削除</button>
+    </div>
+    <div class="field"><span class="flabel">勤務時間</span><small>チェックを外した曜日は休みです。</small>
+      <div class="shifts">${WEEK_ORDER.map((d) => { const sh = t.schedule[d]; const on = !!sh, v = sh || defaultShift();
+        return `<div class="shift ${d === 0 ? "sun" : d === 6 ? "sat" : ""} ${on ? "" : "is-off"}" data-row="${t.key}-${d}">
+          <span class="wd">${WD[d]}</span>
+          <label class="on"><input type="checkbox" id="tr-on-${t.key}-${d}" ${on ? "checked" : ""}>出勤</label>
+          ${timeSelect("tr-s-" + t.key + "-" + d, v.s)}<span>〜</span>${timeSelect("tr-e-" + t.key + "-" + d, v.e)}</div>`; }).join("")}</div>
+      <div class="trtools"><button type="button" class="btn sm ghost" data-copy="${t.key}">月曜の時間を全出勤日にそろえる</button></div>
+    </div>
+    <div class="field"><label for="tr-off-${t.key}">臨時の休み（日付）</label><input id="tr-off-${t.key}" value="${esc((t.off_dates || []).join(", "))}" placeholder="2026-11-23, 2026-12-30"><small>カンマ区切りで日付を入力。この日は予約を受け付けません。</small></div>
+  </div>`).join("");
 }
-function syncTr() { trEdit = trEdit.map((t) => ({ ...t, name: ($("tr-n-" + t.key).value || "").trim(), rank_id: $("tr-r-" + t.key).value, off_weekdays: WD.map((_, i) => i).filter((i) => $("tr-o-" + t.key + "-" + i).checked) })); }
-$("trAdd").addEventListener("click", () => { syncTr(); trEdit.push({ key: "n" + Date.now(), id: null, name: "", rank_id: "standard", off_weekdays: [] }); renderTrEdit(); });
-$("trEdit").addEventListener("click", (e) => { const b = e.target.closest("[data-rm]"); if (!b) return; syncTr(); trEdit = trEdit.filter((t) => t.key !== b.dataset.rm); renderTrEdit(); });
+function syncTr() {
+  trEdit = trEdit.map((t) => {
+    const schedule = {};
+    for (let d = 0; d < 7; d++) schedule[d] = $("tr-on-" + t.key + "-" + d).checked ? { s: +$("tr-s-" + t.key + "-" + d).value, e: +$("tr-e-" + t.key + "-" + d).value } : null;
+    const off_dates = $("tr-off-" + t.key).value.split(/[,、\s]+/).map((x) => x.trim()).filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x));
+    return { ...t, name: ($("tr-n-" + t.key).value || "").trim(), rank_id: $("tr-r-" + t.key).value, schedule, off_dates };
+  });
+}
+$("trAdd").addEventListener("click", () => { syncTr(); const sc = {}; for (let d = 0; d < 7; d++) sc[d] = defaultShift(); trEdit.push({ key: "n" + Date.now(), id: null, name: "", rank_id: "standard", schedule: sc, off_dates: [] }); renderTrEdit(); });
+$("trEdit").addEventListener("click", (e) => {
+  const rm = e.target.closest("[data-rm]"); if (rm) { syncTr(); trEdit = trEdit.filter((t) => t.key !== rm.dataset.rm); renderTrEdit(); return; }
+  const cp = e.target.closest("[data-copy]"); if (cp) { const k = cp.dataset.copy, s0 = $("tr-s-" + k + "-1").value, e0 = $("tr-e-" + k + "-1").value;
+    for (let d = 0; d < 7; d++) if ($("tr-on-" + k + "-" + d).checked) { $("tr-s-" + k + "-" + d).value = s0; $("tr-e-" + k + "-" + d).value = e0; }
+    toast("月曜と同じ時間にそろえました（保存すると反映されます）"); }
+});
+$("trEdit").addEventListener("change", (e) => { if (e.target.id && e.target.id.startsWith("tr-on-")) e.target.closest(".shift").classList.toggle("is-off", !e.target.checked); });
 function fillSettingsForm() {
   if (!settings) return;
   $("s-name").value = settings.name; $("s-open").value = settings.open_hour; $("s-close").value = settings.close_hour; $("s-len").value = settings.slot_minutes;
   WD.forEach((_, i) => ($("s-wk-" + i).checked = (settings.closed_weekdays || []).includes(i)));
   $("s-closed").value = (settings.closed_dates || []).join(", "); $("s-ahead").value = settings.days_ahead;
-  trEdit = trainers.filter((t) => t.active).map((t) => ({ ...t, key: t.id })); renderTrEdit();
+  trEdit = trainers.filter((t) => t.active).map((t) => { const ws = weekSchedule(t, settings), sc = {}; for (let d = 0; d < 7; d++) sc[d] = ws[String(d)] || null; return { ...t, key: t.id, schedule: sc, off_dates: t.off_dates || [] }; }); renderTrEdit();
 }
 $("tab-settings").addEventListener("submit", async (e) => { e.preventDefault(); syncTr();
   const open_hour = +$("s-open").value, close_hour = +$("s-close").value, slot_minutes = +$("s-len").value;
   if (close_hour * 60 < open_hour * 60 + slot_minutes) { toast("終了時刻は開始時刻より後にしてください"); return; }
   if (!trEdit.length || trEdit.some((t) => !t.name)) { toast("トレーナーの名前を入力してください"); return; }
+  for (const t of trEdit) for (let d = 0; d < 7; d++) { const sh = t.schedule[d];
+    if (sh && sh.e - sh.s < slot_minutes) { toast(`${t.name}さんの${WD[d]}曜日：終わりの時刻は、始まりより${slot_minutes}分以上あとにしてください`); return; } }
   const btn = $("saveSettings"); btn.disabled = true;
   try {
     const s = await sb.from("settings").update({
@@ -263,14 +294,16 @@ $("tab-settings").addEventListener("submit", async (e) => { e.preventDefault(); 
     }).eq("id", 1);
     if (s.error) throw s.error;
     for (const [i, t] of trEdit.entries()) {
-      const row = { name: t.name, rank_id: t.rank_id, off_weekdays: t.off_weekdays, sort: i, active: true };
+      const row = { name: t.name, rank_id: t.rank_id, schedule: t.schedule, off_dates: t.off_dates, off_weekdays: [0, 1, 2, 3, 4, 5, 6].filter((d) => !t.schedule[d]), sort: i, active: true };
       const r = t.id ? await sb.from("trainers").update(row).eq("id", t.id) : await sb.from("trainers").insert(row);
       if (r.error) throw r.error;
     }
     const keep = trEdit.filter((t) => t.id).map((t) => t.id);
     const removed = trainers.filter((t) => t.active && !keep.includes(t.id)).map((t) => t.id);
     if (removed.length) { const r = await sb.from("trainers").update({ active: false }).in("id", removed); if (r.error) throw r.error; }
-    toast("設定を保存しました"); await loadAll(); fillSettingsForm();
+    await loadAll(); fillSettingsForm();
+    const outside = open.filter((b) => endOf(b) > jstNow() && outOfShift(b)).length;
+    toast(outside ? `設定を保存しました。勤務時間外になった予約が${outside}件あります（予約一覧で確認できます）` : "設定を保存しました");
   } catch (err) { toast("保存できませんでした。もう一度お試しください。"); }
   finally { btn.disabled = false; }
 });

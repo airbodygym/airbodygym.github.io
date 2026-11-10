@@ -24,6 +24,35 @@ window.APP = (function () {
     try { await navigator.clipboard.writeText(text); toast("コピーしました"); }
     catch (e) { if (input) { input.focus(); input.select(); } toast("選択された文字をコピーしてください"); }
   }
+  // ---- トレーナーのシフト ----
+  // schedule は {"0": null | {s: 開始分, e: 終了分}, ... "6": ...}（0=日曜）。未設定ならジムの営業時間と休みの曜日を使う。
+  const toMin = (t) => { const [h, m] = hm(t).split(":").map(Number); return h * 60 + m; };
+  const fmtMin = (m) => pad(Math.floor(m / 60)) + ":" + pad(m % 60);
+  function weekSchedule(t, settings) {
+    if (t.schedule) return t.schedule;
+    const out = {};
+    for (let d = 0; d < 7; d++) out[d] = (t.off_weekdays || []).includes(d) ? null : { s: settings.open_hour * 60, e: settings.close_hour * 60 };
+    return out;
+  }
+  function shiftOn(t, date, settings) {
+    if ((t.off_dates || []).includes(date)) return null;
+    const sh = weekSchedule(t, settings)[String(parseYmd(date).getDay())];
+    return sh && typeof sh === "object" ? sh : null;
+  }
+  function trainerOpen(t, date, time, settings) {
+    const sh = shiftOn(t, date, settings); if (!sh) return false;
+    const m = toMin(time); return m >= sh.s && m + settings.slot_minutes <= sh.e;
+  }
+  function shiftSummary(t, settings) {
+    const ws = weekSchedule(t, settings), groups = [];
+    for (const d of [1, 2, 3, 4, 5, 6, 0]) {
+      const sh = ws[String(d)]; if (!sh) continue;
+      const key = fmtMin(sh.s) + "〜" + fmtMin(sh.e), g = groups.find((x) => x.key === key);
+      if (g) g.days.push(WD[d]); else groups.push({ key, days: [WD[d]] });
+    }
+    return groups.length ? groups.map((g) => g.days.join("・") + " " + g.key).join(" ／ ") : "出勤日なし";
+  }
+
   function siteBase() { return location.origin + location.pathname.replace(/(admin\.html|index\.html)$/, ""); }
   const myPageUrl = (token) => siteBase() + "?me=" + token;
 
@@ -46,11 +75,12 @@ window.APP = (function () {
     BAD_PLAN: "このプランは申し込めません。",
     ALREADY_APPLIED: "このプランはすでに申し込み済みです。",
     NOT_ADMIN: "管理者としてログインしてください。",
+    TRAINER_OFF: "この時間はトレーナーの勤務時間外です。別の時間を選んでください。",
   };
   function errText(error, fallback) {
     const m = error && (error.message || "");
     for (const k of Object.keys(ERR)) if (m.includes(k)) return ERR[k];
     return fallback || "うまく保存できませんでした。通信状況を確認してもう一度お試しください。";
   }
-  return { sb, WD, $, esc, pad, yen, jstNow, ymd, today, parseYmd, fmtDate, fmtShort, hm, startOf, toast, banner, copy, myPageUrl, errText };
+  return { sb, WD, $, esc, pad, yen, jstNow, ymd, today, parseYmd, fmtDate, fmtShort, hm, startOf, toast, banner, copy, myPageUrl, errText, toMin, fmtMin, weekSchedule, shiftOn, trainerOpen, shiftSummary };
 })();

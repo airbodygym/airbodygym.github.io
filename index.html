@@ -40,7 +40,7 @@
 
   <!-- 予約する -->
   <section class="tab" id="tab-book">
-    <div><p class="label">トレーナー</p><div class="chips" id="trainers"><span class="loading">読み込み中…</span></div></div>
+    <div><p class="label">トレーナー</p><div class="chips" id="trainers"><span class="loading">読み込み中…</span></div><p class="sub" id="trainerInfo" hidden style="margin-top:8px"></p></div>
     <div><p class="label">日付</p><div class="days" id="days"></div></div>
     <div>
       <p class="label" id="boardLabel">時間</p>
@@ -48,7 +48,7 @@
       <div class="legend">
         <span><i style="background:var(--surface)"></i>空き</span>
         <span><i style="background:var(--mine-soft);border-color:var(--mine)"></i>あなたの予約</span>
-        <span><i style="background:transparent"></i>満席・終了</span>
+        <span><i style="background:transparent"></i>満席・受付なし・終了</span>
       </div>
     </div>
     <form class="sheet" id="form" hidden>
@@ -116,7 +116,7 @@
 <script src="assets/common.js"></script>
 <script>
 (function () {
-const { sb, WD, $, esc, pad, yen, jstNow, ymd, today, parseYmd, fmtDate, fmtShort, hm, startOf, toast, banner, copy, myPageUrl, errText } = APP;
+const { sb, WD, $, esc, pad, yen, jstNow, ymd, today, parseYmd, fmtDate, fmtShort, hm, startOf, toast, banner, copy, myPageUrl, errText, shiftOn, trainerOpen, shiftSummary } = APP;
 const TOKEN_KEY = "airbody_token";
 
 let settings = null, trainers = [], ranks = [], plans = [], busy = [], me = null;
@@ -174,13 +174,15 @@ async function loadMe() {
 function daysList() { const out = []; const t = parseYmd(today()); for (let i = 0; i < settings.days_ahead; i++) { const d = new Date(t); d.setDate(t.getDate() + i); out.push(d); } return out; }
 function isClosed(d) { return (settings.closed_weekdays || []).includes(d.getDay()) || (settings.closed_dates || []).includes(ymd(d)); }
 function times() { const out = [], L = settings.slot_minutes; for (let m = settings.open_hour * 60; m + L <= settings.close_hour * 60; m += L) out.push({ h: pad(Math.floor(m / 60)) + ":" + pad(m % 60), end: pad(Math.floor((m + L) / 60)) + ":" + pad((m + L) % 60) }); return out; }
-function workingOn(date) { const wd = parseYmd(date).getDay(); return trainers.filter((t) => !(t.off_weekdays || []).includes(wd)); }
+function workingOn(date) { return trainers.filter((t) => shiftOn(t, date, settings)); }
 function candidates(date) { const w = workingOn(date); return sel.trainer === "any" ? w : w.filter((t) => t.id === sel.trainer); }
-function freeTrainers(date, h) { return candidates(date).filter((t) => !busy.includes(date + "_" + h + "_" + t.id)); }
+function openTrainers(date, h) { return candidates(date).filter((t) => trainerOpen(t, date, h, settings)); }
+function freeTrainers(date, h) { return openTrainers(date, h).filter((t) => !busy.includes(date + "_" + h + "_" + t.id)); }
 function myAt(date, h) { return me && me.bookings.some((b) => !b.status && b.on_date === date && b.start_time === h); }
 function timeState(date, h) {
   if (myAt(date, h)) return "mine";
   if (startOf(date, h) <= jstNow()) return "past";
+  if (!openTrainers(date, h).length) return "off";
   return freeTrainers(date, h).length ? "free" : "taken";
 }
 
@@ -189,6 +191,9 @@ function renderTrainers() {
   if (sel.trainer !== "any" && !trainerById(sel.trainer)) sel.trainer = "any";
   $("trainers").innerHTML = [`<button type="button" class="chip" data-t="any" aria-pressed="${sel.trainer === "any"}">指名なし</button>`]
     .concat(trainers.map((t) => { const r = rankOf(t.rank_id); return `<button type="button" class="chip" data-t="${esc(t.id)}" aria-pressed="${sel.trainer === t.id}">${esc(t.name)}<small>${esc(r.label)} +${yen(r.fee)}</small></button>`; })).join("");
+  const t = trainerById(sel.trainer);
+  $("trainerInfo").hidden = !t;
+  if (t) $("trainerInfo").textContent = "勤務：" + shiftSummary(t, settings);
 }
 $("trainers").addEventListener("click", (e) => { const b = e.target.closest(".chip"); if (!b) return; sel.trainer = b.dataset.t; sel.time = null; renderBook(); });
 function renderDays() {
@@ -201,7 +206,7 @@ $("days").addEventListener("click", (e) => { const b = e.target.closest(".day");
 function renderBoard() {
   if (!sel.date) { $("boardLabel").textContent = "時間"; $("board").innerHTML = `<div class="empty" style="grid-column:1/-1">${sel.trainer === "any" ? "予約できる日がありません" : "このトレーナーが予約を受けられる日がありません"}</div>`; return; }
   $("boardLabel").textContent = fmtDate(sel.date) + "の時間";
-  $("board").innerHTML = times().map((t) => { const st = timeState(sel.date, t.h); const lbl = { free: "空き", taken: "満席", past: "終了", mine: "予約済み" }[st];
+  $("board").innerHTML = times().map((t) => { const st = timeState(sel.date, t.h); const lbl = { free: "空き", taken: "満席", past: "終了", mine: "予約済み", off: "受付なし" }[st];
     return `<button type="button" class="slot ${st}" data-h="${t.h}" aria-pressed="${sel.time === t.h}" ${st === "free" ? "" : "disabled"}><span class="t">${t.h}</span><span class="s">${lbl}</span></button>`; }).join("") || `<div class="empty" style="grid-column:1/-1">予約枠がありません</div>`;
 }
 $("board").addEventListener("click", (e) => { const b = e.target.closest(".slot"); if (!b || b.disabled) return; sel.time = b.dataset.h; renderBoard(); renderForm(); $("form").scrollIntoView({ behavior: "smooth", block: "nearest" }); });

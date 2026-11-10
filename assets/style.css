@@ -52,7 +52,19 @@ section.tab{display:flex;flex-direction:column;gap:18px}
 .slot[aria-pressed="true"] .s{color:var(--accent-ink)}
 .slot:disabled{cursor:default;background:transparent}
 .slot.taken .t{color:var(--muted);text-decoration:line-through}.slot.taken .s{color:var(--muted)}
-.slot.past{opacity:.35}.slot.past .s{color:var(--muted)}
+.slot.past,.slot.off{opacity:.35}.slot.past .s,.slot.off .s{color:var(--muted)}
+.trcard{border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:10px;background:var(--bg)}
+.trhead{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end}
+.shifts{display:flex;flex-direction:column;gap:6px}
+.shift{display:grid;grid-template-columns:2.2em auto 1fr auto 1fr;gap:6px;align-items:center;font-size:14px}
+.shift .wd{font-weight:700}
+.shift.sun .wd{color:var(--warn)}.shift.sat .wd{color:var(--sat)}
+.shift label.on{display:flex;align-items:center;gap:4px;white-space:nowrap}
+.shift label.on input{width:auto}
+.shift select{padding:7px 8px;font-size:15px;min-width:0}
+.shift.is-off select{opacity:.35}
+.trtools{display:flex;gap:8px;flex-wrap:wrap}
+@media (max-width:420px){.trhead{grid-template-columns:1fr 1fr}.trhead>button{grid-column:1/-1;justify-self:start}}
 .slot.mine{background:var(--mine-soft);border-color:var(--mine)}.slot.mine .s{color:var(--ink)}
 .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:10px}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px;border:1px solid var(--line)}
