@@ -30,15 +30,15 @@
     <div class="field"><label for="l-email">メールアドレス</label><input id="l-email" type="email" autocomplete="username" required></div>
     <div class="field"><label for="l-pass">パスワード</label><input id="l-pass" type="password" autocomplete="current-password" minlength="8" required><small id="passHint" hidden>8文字以上</small></div>
     <button class="btn" type="submit" id="loginBtn">ログイン</button>
-    <button class="btn ghost sm" type="button" id="toggleSignup" style="align-self:flex-start">はじめて使う（オーナー登録）</button>
-    <p class="sub" id="signupNote" hidden style="margin:0">最初に登録した1人だけがオーナー（管理者）になります。登録後に届く確認メールのリンクを押してから、ここでログインしてください。</p>
+    <button class="btn ghost sm" type="button" id="toggleSignup" style="align-self:flex-start">はじめて使う（新規登録）</button>
+    <p class="sub" id="signupNote" hidden style="margin:0">トレーナーの方は、オーナーに登録してもらったメールアドレスで登録してください。登録後に届く確認メールのリンクを押してから、ここでログインしてください。</p>
   </form>
 
   <div id="app" hidden style="display:flex;flex-direction:column;gap:18px">
     <nav role="tablist" id="tabs">
       <button role="tab" data-tab="admin" aria-selected="true">予約一覧</button>
       <button role="tab" data-tab="cust" aria-selected="false">お客さん</button>
-      <button role="tab" data-tab="settings" aria-selected="false">設定</button>
+      <button role="tab" id="tabSettingsBtn" data-tab="settings" aria-selected="false">設定</button>
     </nav>
 
     <section class="tab" id="tab-admin">
@@ -93,6 +93,8 @@
     </section>
 
     <form id="tab-settings" class="sheet" hidden>
+      <p class="note staff-only" id="staffNote" style="margin:0">自分の勤務（日付ごと・いつもの勤務）を変えられます。名前や指名料のランク、ジムの設定はオーナーが変更します。</p>
+      <div class="owner-only" style="display:contents">
       <div class="field"><label for="s-name">ジム名</label><input id="s-name"></div>
       <div class="row">
         <div class="field"><label for="s-open">営業開始</label><select id="s-open"></select></div>
@@ -102,9 +104,19 @@
       <div class="field"><span class="flabel">定休日</span><div class="wk" id="s-wk"></div></div>
       <div class="field"><label for="s-closed">臨時休業日</label><input id="s-closed" placeholder="2026-11-03, 2026-12-31"><small>カンマ区切りで日付を入力</small></div>
       <div class="field"><label for="s-ahead">何日先まで予約できるか</label><input id="s-ahead" type="number" min="1" max="60"></div>
+      </div>
       <div class="field"><span class="flabel">トレーナー</span><small>トレーナーを選んで、日付ごとに出勤・勤務時間を決めます。決めていない日は「いつもの勤務（曜日ごと）」が使われます。お客さんの予約画面には、勤務時間内の枠だけが空きとして表示されます。</small>
         <div id="trEdit" style="display:flex;flex-direction:column;gap:10px;margin-top:6px"></div>
-        <button type="button" class="btn ghost sm" id="trAdd" style="align-self:flex-start">トレーナーを追加</button>
+        <button type="button" class="btn ghost sm owner-only" id="trAdd" style="align-self:flex-start">トレーナーを追加</button>
+      </div>
+      <div class="field owner-only"><span class="flabel">管理画面を使える人</span>
+        <small>トレーナーのメールアドレスを登録すると、そのアドレスで新規登録した人が管理画面に入れます。トレーナーができるのは、予約一覧・受講の記録・時間の押さえ・カルテ・自分のシフトの変更だけです。料金やジムの設定、チケットの有効化はオーナーだけができます。</small>
+        <div class="list" id="staffList" style="margin-top:6px"></div>
+        <div class="row" style="margin-top:6px">
+          <div class="field"><label for="st-email">メールアドレス</label><input id="st-email" type="email" placeholder="trainer@example.com" autocomplete="off"></div>
+          <div class="field"><label for="st-tr">どのトレーナー？</label><select id="st-tr"></select></div>
+        </div>
+        <button type="button" class="btn ghost sm" id="st-add" style="align-self:flex-start">登録する</button>
       </div>
       <button class="btn" type="submit" id="saveSettings">設定を保存</button>
       <button class="btn ghost sm" type="button" id="logout" style="align-self:flex-start">ログアウト</button>
@@ -127,7 +139,7 @@ $("toggleSignup").addEventListener("click", () => {
   signup = !signup;
   $("loginTitle").textContent = signup ? "オーナー登録" : "ログイン";
   $("loginBtn").textContent = signup ? "登録する" : "ログイン";
-  $("toggleSignup").textContent = signup ? "ログインに戻る" : "はじめて使う（オーナー登録）";
+  $("toggleSignup").textContent = signup ? "ログインに戻る" : "はじめて使う（新規登録）";
   $("signupNote").hidden = !signup; $("passHint").hidden = !signup;
   $("l-pass").autocomplete = signup ? "new-password" : "current-password";
 });
@@ -156,15 +168,19 @@ $("logout").addEventListener("click", async () => { await sb.auth.signOut(); loc
 async function enter() {
   const { data: { user } } = await sb.auth.getUser();
   if (!user) { $("login").hidden = false; $("app").hidden = true; return; }
-  const { data: adm } = await sb.from("admins").select("user_id").eq("user_id", user.id).maybeSingle();
-  if (!adm) { $("login").hidden = false; $("app").hidden = true; banner("このアカウントには管理者の権限がありません。オーナーのアカウントでログインしてください。", true); await sb.auth.signOut(); return; }
-  banner(""); $("login").hidden = true; $("app").hidden = false; $("who").textContent = user.email;
+  const { data: r } = await sb.rpc("my_role");
+  if (!r) { $("login").hidden = false; $("app").hidden = true; banner("このメールアドレスは、まだ管理画面を使える人として登録されていません。オーナーに「設定」の「管理画面を使える人」で登録してもらってください。", true); await sb.auth.signOut(); return; }
+  role = r.role; myTrainer = r.trainer_id || null;
+  document.body.classList.toggle("is-staff", role === "staff");
+  $("tabSettingsBtn").textContent = role === "staff" ? "自分のシフト" : "設定";
+  $("saveSettings").textContent = role === "staff" ? "シフトを保存" : "設定を保存";
+  banner(""); $("login").hidden = true; $("app").hidden = false; $("who").textContent = user.email + (role === "staff" ? "（トレーナー）" : "（オーナー）");
   await loadAll();
 }
 
 /* ---------- タブ ---------- */
 $("tabs").addEventListener("click", (e) => { const b = e.target.closest("button[data-tab]"); if (b) showTab(b.dataset.tab); });
-let lastTab = "admin";
+let lastTab = "admin", role = "owner", myTrainer = null, staffList = [];
 function showTab(name) {
   document.querySelectorAll("#tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === name));
   ["admin", "cust", "settings", "karte"].forEach((n) => ($("tab-" + n).hidden = n !== name));
@@ -190,6 +206,7 @@ async function loadAll() {
   if (err) { banner("読み込めませんでした。ページを開き直してください。", true); return; }
   settings = s.data; trainers = t.data; ranks = r.data; plans = p.data; open = b.data; customers = c.data; usage = u.data; blocks = k.data; notes = n.data;
   $("studioName").textContent = settings.name;
+  if (role === "owner") { const st = await sb.from("staff").select("*").order("created_at"); staffList = st.data || []; }
   renderAdmin(); renderCust(); if (!$("hold").hidden) renderHold(); if (!$("tab-karte").hidden) renderKarte();
 }
 $("reload").addEventListener("click", async () => { await loadAll(); toast("最新の状態にしました"); });
@@ -404,7 +421,7 @@ function renderKarte() {
 $("k-back").addEventListener("click", () => showTab(lastTab || "admin"));
 $("k-formReset").addEventListener("click", () => { kst.booking = null; resetNoteForm(); });
 $("k-saveInfo").addEventListener("click", async () => {
-  const { error } = await sb.from("customers").update({ goal: $("k-goal").value.trim() || null, health_notes: $("k-health").value.trim() || null }).eq("id", kst.cid);
+  const { error } = await sb.rpc("update_karte_info", { p_customer: kst.cid, p_goal: $("k-goal").value, p_health: $("k-health").value });
   toast(error ? "保存できませんでした。もう一度お試しください。" : "基本情報を保存しました");
   if (!error) { const c = customers.find((x) => x.id === kst.cid); if (c) { c.goal = $("k-goal").value.trim(); c.health_notes = $("k-health").value.trim(); } }
 });
@@ -440,11 +457,11 @@ function renderCust() {
   list.sort((a, b) => pend(b) - pend(a));
   $("custList").innerHTML = list.map((c) => {
     const visits = usage.filter((u) => u.customer_id === c.id && u.status === "done").length;
-    const apps = c.applications.filter((a) => a.status === "pending").map((a) => { const pl = plans.find((p) => p.id === a.plan_id) || {}; const k = c.id + "|" + a.id + "|" + a.plan_id;
+    const apps = role !== "owner" ? (c.applications.some((a) => a.status === "pending") ? `<div class="mini"><span><span class="pill warn">申込あり</span>オーナーが確認中</span></div>` : "") : c.applications.filter((a) => a.status === "pending").map((a) => { const pl = plans.find((p) => p.id === a.plan_id) || {}; const k = c.id + "|" + a.id + "|" + a.plan_id;
       return `<div class="mini"><span><span class="pill warn">申込</span>${esc(pl.label)} ${yen(pl.price)}</span><span class="row" style="flex:0 0 auto">${apending.has("A" + k) ? `<button class="btn sm" data-ago="${k}">入金確認済みで有効にする</button><button class="btn sm ghost" data-astop="${k}">やめる</button>` : `<button class="btn sm" data-aask="${k}">有効にする</button><button class="btn sm ghost" data-arej="${esc(a.id)}">取り下げ</button>`}</span></div>`; }).join("");
     const passes = c.passes.filter((p) => today() <= p.expires_on).map((p) => `<div class="mini"><span>${esc(p.label)}</span><span><b style="font-family:var(--mono)">${passLeft(p)}</b>/${p.sessions + p.bonus}回 ・ 期限 ${fmtShort(p.expires_on)}</span></div>`).join("");
     return `<div class="cust"><div class="hd"><b>${esc(c.name)}</b><span class="sm">受講${visits}回</span></div><div class="sm">${esc(c.contact)}</div>${apps}${passes}
-      <div class="mini"><label for="add-${c.id}" class="sm">プランを追加（店頭で支払い済み）</label><span class="row" style="flex:1 1 220px"><select id="add-${c.id}">${plans.filter((p) => p.active).map((p) => `<option value="${esc(p.id)}">${esc(p.label)} ${yen(p.price)}</option>`).join("")}</select><button class="btn sm ghost" data-add="${c.id}" style="flex:0 0 auto">追加</button></span></div>
+      ${role !== "owner" ? "" : `<div class="mini"><label for="add-${c.id}" class="sm">プランを追加（店頭で支払い済み）</label><span class="row" style="flex:1 1 220px"><select id="add-${c.id}">${plans.filter((p) => p.active).map((p) => `<option value="${esc(p.id)}">${esc(p.label)} ${yen(p.price)}</option>`).join("")}</select><button class="btn sm ghost" data-add="${c.id}" style="flex:0 0 auto">追加</button></span></div>`}
       <div class="mini"><span class="sm">マイページURL（お客さんに再送するとき）</span><button class="btn sm ghost" data-url="${esc(c.token)}">コピー</button></div>
       <button class="btn sm" data-karte="${c.id}" style="align-self:flex-start">カルテを開く${notesFor(c.id).length ? "（" + notesFor(c.id).length + "件）" : ""}</button></div>`;
   }).join("");
@@ -491,9 +508,9 @@ function renderTrEdit() {
   $("trEdit").innerHTML = `<div class="chips">${trEdit.map((t) => `<button type="button" class="chip" data-pick="${t.key}" aria-pressed="${t.key === trSel}">${esc(t.name || "（名前未入力）")}</button>`).join("")}</div>` +
   trEdit.map((t) => `<div class="trcard" ${t.key === trSel ? "" : "hidden"}>
     <div class="trhead">
-      <div class="field"><label for="tr-n-${t.key}">名前</label><input id="tr-n-${t.key}" value="${esc(t.name)}"></div>
-      <div class="field"><label for="tr-r-${t.key}">ランク（指名料）</label><select id="tr-r-${t.key}">${ranks.map((r) => `<option value="${r.id}" ${r.id === t.rank_id ? "selected" : ""}>${esc(r.label)}（+${yen(r.fee)}）</option>`).join("")}</select></div>
-      <button type="button" class="btn sm ghost" data-rm="${t.key}" ${trEdit.length < 2 ? "disabled" : ""}>削除</button>
+      <div class="field"><label for="tr-n-${t.key}">名前</label><input id="tr-n-${t.key}" value="${esc(t.name)}" ${role === "staff" ? "readonly" : ""}></div>
+      <div class="field"><label for="tr-r-${t.key}">ランク（指名料）</label><select id="tr-r-${t.key}" ${role === "staff" ? "disabled" : ""}>${ranks.map((r) => `<option value="${r.id}" ${r.id === t.rank_id ? "selected" : ""}>${esc(r.label)}（+${yen(r.fee)}）</option>`).join("")}</select></div>
+      ${role === "staff" ? "" : `<button type="button" class="btn sm ghost" data-rm="${t.key}" ${trEdit.length < 2 ? "disabled" : ""}>削除</button>`}
     </div>
     <div class="field"><span class="flabel">日付ごとの勤務</span><small>日にちごとに出勤・時間を決められます。チェックを外した日はお休みです。</small>
       <div class="shifts">${dates.map((d) => { const dt = parseYmd(d), wd = dt.getDay(), lbl = `${dt.getMonth() + 1}/${dt.getDate()}<small>（${WD[wd]}）</small>`, cls = "dayrow " + (wd === 0 ? "sun" : wd === 6 ? "sat" : "");
@@ -536,16 +553,41 @@ $("trEdit").addEventListener("change", (e) => {
   if (id.startsWith("tr-d-")) { syncTr(); renderTrEdit(); }
   if (id.startsWith("tr-n-")) { syncTr(); renderTrEdit(); }
 });
+function renderStaff() {
+  if (role !== "owner") return;
+  const act = trainers.filter((t) => t.active);
+  $("st-tr").innerHTML = act.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join("");
+  $("staffList").innerHTML = staffList.length ? staffList.map((x) => { const k = "S" + x.email;
+    return `<div class="mini" style="border-top:0;padding:0"><span><b>${esc(x.email)}</b><span class="sub" style="margin:0 0 0 6px">${esc(x.trainer_id ? (act.find((t) => t.id === x.trainer_id) || {}).name || "（退職）" : "トレーナー未選択")}</span></span>
+      ${apending.has(k) ? `<span class="row" style="flex:0 0 auto"><button type="button" class="btn sm danger" data-stgo="${esc(x.email)}">外す</button><button type="button" class="btn sm ghost" data-ststop="${esc(x.email)}">やめる</button></span>` : `<button type="button" class="btn sm ghost" data-stask="${esc(x.email)}">外す</button>`}</div>`; }).join("")
+    : `<p class="sub" style="margin:0">まだ登録されていません。今はオーナーだけが管理画面を使えます。</p>`;
+}
+$("st-add").addEventListener("click", async () => {
+  const email = $("st-email").value.trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { toast("メールアドレスを正しく入力してください"); return; }
+  const { error } = await sb.from("staff").upsert({ email, trainer_id: $("st-tr").value || null });
+  if (error) { toast("登録できませんでした。もう一度お試しください。"); return; }
+  $("st-email").value = ""; toast(email + " を登録しました。このアドレスで新規登録してもらってください"); await loadAll(); renderStaff();
+});
+$("staffList").addEventListener("click", async (e) => { const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.stask) { apending.add("S" + b.dataset.stask); renderStaff(); return; }
+  if (b.dataset.ststop) { apending.delete("S" + b.dataset.ststop); renderStaff(); return; }
+  if (b.dataset.stgo) { const { error } = await sb.from("staff").delete().eq("email", b.dataset.stgo); apending.delete("S" + b.dataset.stgo);
+    toast(error ? "外せませんでした。" : "外しました。この人はもう管理画面に入れません"); await loadAll(); renderStaff(); }
+});
 function fillSettingsForm() {
   if (!settings) return;
   $("s-name").value = settings.name; $("s-open").value = settings.open_hour; $("s-close").value = settings.close_hour; $("s-len").value = settings.slot_minutes;
   WD.forEach((_, i) => ($("s-wk-" + i).checked = (settings.closed_weekdays || []).includes(i)));
   $("s-closed").value = (settings.closed_dates || []).join(", "); $("s-ahead").value = settings.days_ahead;
-  trEdit = trainers.filter((t) => t.active).map((t) => { const ws = weekSchedule(t, settings), sc = {}; for (let d = 0; d < 7; d++) sc[d] = ws[String(d)] || null; const ds = { ...(t.day_shifts || {}) }; for (const d of t.off_dates || []) if (!(d in ds)) ds[d] = null; return { ...t, key: t.id, schedule: sc, day_shifts: ds }; }); renderTrEdit();
+  trEdit = trainers.filter((t) => t.active).map((t) => { const ws = weekSchedule(t, settings), sc = {}; for (let d = 0; d < 7; d++) sc[d] = ws[String(d)] || null; const ds = { ...(t.day_shifts || {}) }; for (const d of t.off_dates || []) if (!(d in ds)) ds[d] = null; return { ...t, key: t.id, schedule: sc, day_shifts: ds }; });
+  if (role === "staff") trEdit = trEdit.filter((t) => t.id === myTrainer);
+  renderTrEdit(); renderStaff();
 }
 $("tab-settings").addEventListener("submit", async (e) => { e.preventDefault(); syncTr();
   const open_hour = +$("s-open").value, close_hour = +$("s-close").value, slot_minutes = +$("s-len").value;
   if (close_hour * 60 < open_hour * 60 + slot_minutes) { toast("終了時刻は開始時刻より後にしてください"); return; }
+  if (role === "staff" && !trEdit.length) { toast("あなたのアカウントがどのトレーナーか、まだ決まっていません。オーナーに設定してもらってください。"); return; }
   if (!trEdit.length || trEdit.some((t) => !t.name)) { toast("トレーナーの名前を入力してください"); return; }
   const tooShort = (sh) => sh && sh.e - sh.s < slot_minutes;
   for (const t of trEdit) {
@@ -553,6 +595,13 @@ $("tab-settings").addEventListener("submit", async (e) => { e.preventDefault(); 
     for (const [d, v] of Object.entries(t.day_shifts)) if (tooShort(v)) { trSel = t.key; renderTrEdit(); toast(`${t.name}さんの${fmtDate(d)}：終わりの時刻は、始まりより${slot_minutes}分以上あとにしてください`); return; }
   }
   const btn = $("saveSettings"); btn.disabled = true;
+  if (role === "staff") {
+    const t = trEdit[0];
+    const { error } = t ? await sb.rpc("set_my_shift", { p_schedule: t.schedule, p_day_shifts: t.day_shifts }) : { error: { message: "NO_TRAINER" } };
+    btn.disabled = false;
+    if (error) { toast(String(error.message).includes("NO_TRAINER") ? "あなたのアカウントがどのトレーナーか、まだ決まっていません。オーナーに設定してもらってください。" : "保存できませんでした。もう一度お試しください。"); return; }
+    await loadAll(); fillSettingsForm(); toast("シフトを保存しました"); return;
+  }
   try {
     const s = await sb.from("settings").update({
       name: $("s-name").value.trim() || "AIR BODY GYM", open_hour, close_hour, slot_minutes,

@@ -250,3 +250,6 @@ svg{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-l
 .cover.has-photo{background-position:center 58%}
 .cover.has-photo::before{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(15,26,36,0) 45%,rgba(15,26,36,.55) 100%)}
 .cover.has-photo .cover-logo{display:block;position:absolute;right:16px;bottom:12px;width:min(110px,24%);z-index:1;filter:drop-shadow(0 1px 3px rgba(0,0,0,.45))}
+.staff-only{display:none}
+body.is-staff .staff-only{display:block}
+body.is-staff .owner-only{display:none!important}
