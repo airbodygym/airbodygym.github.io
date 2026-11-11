@@ -246,3 +246,7 @@ svg{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-l
   .side nav{display:grid;grid-template-columns:1fr 1fr;border-radius:16px;overflow:visible}
   .side nav button{border-radius:12px;padding:8px 6px;font-size:13px}
 }
+/* 写真が入ったときの一番上：下に薄い影を敷いて白いロゴを重ねる */
+.cover.has-photo{background-position:center 58%}
+.cover.has-photo::before{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(15,26,36,0) 45%,rgba(15,26,36,.55) 100%)}
+.cover.has-photo .cover-logo{display:block;position:absolute;right:16px;bottom:12px;width:min(110px,24%);z-index:1;filter:drop-shadow(0 1px 3px rgba(0,0,0,.45))}

@@ -441,7 +441,7 @@ $("applyForm").addEventListener("submit", async (e) => { e.preventDefault();
   if (isNew) { $("doneWhen").textContent = p.label + "を申し込みました"; $("doneUrl").value = myPageUrl(data.token); $("done").hidden = false; $("done").scrollIntoView({ behavior: "smooth" }); }
 });
 
-(function () { const im = new Image(); im.onload = () => { $("cover").style.backgroundImage = 'url("assets/hero.jpg")'; $("cover").classList.add("has-photo"); }; im.src = "assets/hero.jpg"; })();
+(function () { const im = new Image(); im.onload = () => { $("cover").style.backgroundImage = 'url("assets/hero.jpg")'; $("cover").classList.add("has-photo"); $("cover").querySelector(".cover-logo").src = "assets/logo-white.png"; }; im.src = "assets/hero.jpg"; })();
 function renderAll() { renderHome(); renderBook(); renderMine(); renderPlans(); $("who").textContent = me ? me.name + " さま" : ""; }
 
 /* ---------- 起動 ---------- */
