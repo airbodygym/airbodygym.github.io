@@ -1,7 +1,7 @@
 /* AIR BODY GYM 予約サイト — 受付タブレットのような一列レイアウト */
 :root{
   /* 明るく爽やか：空気のような白と、AIR の空色。ロゴの墨色を文字色に使う */
-  --bg:#F4F8FB; --surface:#FFFFFF; --ink:#0F1A24; --muted:#5A6A79; --line:#DCE5EE;
+  --bg:#FFFFFF; --surface:#FFFFFF; --soft:#F3F6F9; --ink:#0F1A24; --muted:#5A6A79; --line:#DCE5EE;
   --accent:#1683E8; --accent-ink:#FFFFFF; --accent-soft:#E3F0FD; --accent-deep:#0B5FB0;
   --warn:#C24A1E; --warn-soft:#FCEBE3; --mine:#E0A100; --mine-soft:#FFF5D6; --sat:#2F6FE0;
   --display:"Outfit","Zen Kaku Gothic New",system-ui,sans-serif;
@@ -12,20 +12,20 @@
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html{-webkit-text-size-adjust:100%}
-body{margin:0;background:linear-gradient(180deg,#E4F1FD 0,var(--bg) 320px) no-repeat var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.6;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.6;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 .wrap{max-width:640px;margin:0 auto;padding-block:20px 56px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:18px}
 header{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .brand{margin:0;line-height:0}
-.logo{display:block;width:120px;height:auto;max-width:100%}
+.logo{display:block;width:104px;height:auto;max-width:100%}
 .vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 header.hero{flex-direction:column;align-items:center;text-align:center;gap:10px;padding-block:18px 6px}
 header.hero > div{display:flex;flex-direction:column;align-items:center;gap:10px}
-header.hero .logo{width:168px}
+header.hero .logo{width:min(150px,42vw)}
 .tagline{margin:0;font-size:15px;font-weight:700;letter-spacing:.06em;text-wrap:balance}
 header.hero .who:empty{display:none}
 .sub{color:var(--muted);font-size:13px;margin:2px 0 0}
 .who{font-size:12px;color:var(--muted)}
-nav{display:flex;gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:4px;box-shadow:0 2px 10px rgba(22,131,232,.08);overflow-x:auto;position:sticky;top:env(safe-area-inset-top,0px);z-index:5}
+nav{display:flex;gap:4px;background:var(--soft);border:1px solid var(--line);border-radius:999px;padding:4px;box-shadow:0 2px 10px rgba(22,131,232,.08);overflow-x:auto;position:sticky;top:env(safe-area-inset-top,0px);z-index:5}
 nav button{flex:1 0 auto;white-space:nowrap;border:0;background:none;color:var(--muted);font:500 14px var(--body);padding:9px 12px;border-radius:999px;cursor:pointer}
 nav button[aria-selected="true"]{background:var(--accent);color:var(--accent-ink);font-weight:700}
 button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -181,3 +181,8 @@ details.weekly{background:transparent;padding:10px 12px}
 .slot .t,.day .dn,.tm,.when,.total b,.pp,.left,.stat b{letter-spacing:.01em}
 .label{color:var(--accent-deep)}
 .note{background:var(--accent-soft)}
+
+/* 白い背景でも入力欄や押せない枠が見分けられるように */
+input,textarea,select{background:var(--surface)}
+.slot:disabled,.slot.taken,.slot.past,.slot.off{background:var(--soft)}
+.day:disabled{background:var(--soft)}
