@@ -5,7 +5,8 @@
 - お客さん用：https://airbodygym.github.io/
 - 管理画面：https://airbodygym.github.io/admin.html
 
-- `index.html` … お客さん用（予約・マイページ・プラン申し込み）
+- `index.html` … お客さん用（メニュー・空き状況と予約・マイページ・プラン申し込み）
+- 写真を入れるには `assets/hero.jpg`（一番上の写真）と `assets/menu-trial.jpg` `menu-personal.jpg` `menu-tickets.jpg` `menu-m4.jpg`（メニューの写真）を置く。置いていない間はイラストが表示される。
 - `admin.html` … トレーナー用の管理画面（予約一覧・受講記録・チケット有効化・設定）
 - データは Supabase（プロジェクト `airbody-yoyaku`）に保存されます。
 

@@ -14,21 +14,25 @@
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
-<div class="wrap">
-  <header class="hero">
-    <div>
-      <h1 class="brand"><img class="logo" src="assets/logo.png" alt="AIR BODY GYM SENDAI" width="672" height="411"><span class="vh" id="studioName">AIR BODY GYM</span></h1>
-      <p class="tagline">完全予約制のパーソナルトレーニング</p>
-      <p class="sub" id="studioSub"></p>
-    </div>
-    <div class="who" id="who"></div>
-  </header>
+<div class="wrap site">
+  <div class="cover" id="cover" role="img" aria-label="AIR BODY GYM のトレーニング風景">
+    <img class="cover-logo" src="assets/logo.png" alt="" width="400" height="245">
+  </div>
 
-  <nav role="tablist" id="tabs">
-    <button role="tab" data-tab="book" aria-selected="true">予約する</button>
-    <button role="tab" data-tab="mine" aria-selected="false">マイページ</button>
-    <button role="tab" data-tab="plans" aria-selected="false">プラン・料金</button>
-  </nav>
+  <aside class="side">
+    <div class="gym">
+      <h1 class="gymname"><span id="studioName">AIR BODY GYM</span> <small>SENDAI</small></h1>
+      <p class="sub" id="studioSub">完全予約制のパーソナルトレーニング</p>
+      <div class="who" id="who"></div>
+    </div>
+    <button class="btn outline avail" type="button" id="toAvail"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4M7.5 13h2M11 13h2M14.5 13h2M7.5 16.5h2M11 16.5h2"/></svg>空き状況</button>
+    <nav role="tablist" id="tabs" aria-label="ページ">
+      <button role="tab" data-tab="home" aria-selected="true">ホーム</button>
+      <button role="tab" data-tab="book" aria-selected="false">空き状況・予約</button>
+      <button role="tab" data-tab="plans" aria-selected="false">月額プラン・回数券</button>
+      <button role="tab" data-tab="mine" aria-selected="false">マイページ</button>
+    </nav>
+  </aside>
 
   <div id="banner" class="note" hidden></div>
 
@@ -41,8 +45,16 @@
     <div class="row"><button class="btn ghost" id="doneMore" type="button">続けて予約する</button><button class="btn" id="doneMine" type="button">マイページを見る</button></div>
   </div>
 
+  <!-- ホーム：メニュー -->
+  <section class="tab" id="tab-home">
+    <div class="panel filters" id="filters"></div>
+    <div class="panel menus" id="menus"><p class="loading" style="padding:16px">読み込み中…</p></div>
+    <button class="btn outline wide" type="button" id="toPlans"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></svg>月額プラン・回数券</button>
+  </section>
+
   <!-- 予約する -->
-  <section class="tab" id="tab-book">
+  <section class="tab" id="tab-book" hidden>
+    <div class="picked" id="picked" hidden></div>
     <div><p class="label">トレーナー</p><div class="chips" id="trainers"><span class="loading">読み込み中…</span></div><p class="sub" id="trainerInfo" hidden style="margin-top:8px"></p></div>
     <div><p class="label">日付</p><div class="days" id="days"></div></div>
     <div>
@@ -56,7 +68,7 @@
     </div>
     <form class="sheet" id="form" hidden>
       <div><h3>予約内容の確認</h3><div class="when" id="formWhen"></div></div>
-      <div class="field"><span class="flabel">お支払い方法</span><div class="pays" id="pays"></div></div>
+      <div class="field"><span class="flabel">お支払い方法</span><p class="note warn" id="trialNote" hidden style="margin:0">初回体験はすでにご利用済みのため、通常のトレーニングとしてご予約いただけます。</p><div class="pays" id="pays"></div></div>
       <div class="lines" id="lines"></div>
       <div class="total"><span>お支払い金額（税込）</span><b id="total">0円</b></div>
       <div class="field"><label for="f-name">お名前</label><input id="f-name" required autocomplete="name" placeholder="山田 花子"></div>
@@ -124,7 +136,7 @@ const TOKEN_KEY = "airbody_token";
 
 let settings = null, trainers = [], ranks = [], plans = [], busy = [], me = null;
 let token = null;
-let sel = { trainer: "any", date: null, time: null, pay: null, plan: null };
+let sel = { trainer: "any", date: null, time: null, pay: null, plan: null, menu: null };
 
 /* ---------- マイページのトークン ---------- */
 (function () {
@@ -139,9 +151,73 @@ function setToken(t) { token = t; try { localStorage.setItem(TOKEN_KEY, t); } ca
 $("tabs").addEventListener("click", (e) => { const b = e.target.closest("button[data-tab]"); if (b) showTab(b.dataset.tab); });
 function showTab(name) {
   document.querySelectorAll("#tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === name));
-  ["book", "mine", "plans"].forEach((n) => ($("tab-" + n).hidden = n !== name));
+  ["home", "book", "mine", "plans"].forEach((n) => ($("tab-" + n).hidden = n !== name));
   $("done").hidden = true;
+  if (name === "book") renderBook();
+  window.scrollTo({ top: name === "home" ? 0 : Math.max(0, $("tabs").getBoundingClientRect().top + window.scrollY - 12), behavior: "smooth" });
 }
+
+/* ---------- ホーム：メニュー ---------- */
+const ICONS = {
+  trial: '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8-4.3-4.1 5.9-.9z"/>',
+  personal: '<path d="M2.5 12h2M19.5 12h2M6.5 8v8M17.5 8v8M4.5 9.5v5M19.5 9.5v5M6.5 12h11"/>',
+  ticket: '<path d="M3.5 7.5h17v3a2 2 0 000 4v3h-17v-3a2 2 0 000-4z"/><path d="M14 7.5v10" stroke-dasharray="1.6 1.8"/>',
+  monthly: '<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4M8 14l2.5 2.5L16 12"/>',
+};
+const CATS = [
+  { id: "trial", label: "初回体験", desc: "はじめての方向けの体験トレーニングです。体の状態や目標をうかがって、無理のない内容で行います。" },
+  { id: "personal", label: "パーソナルトレーニング", desc: "トレーナーとマンツーマンのトレーニングです。都度払いのほか、回数券や月額プランでも受けられます。" },
+  { id: "plans", label: "回数券・月額プラン", desc: "まとめて買うと1回あたりがお得になります。お支払い確認後にマイページで使えるようになります。" },
+  { id: "all", label: "すべてのメニュー", desc: "" },
+];
+let cat = "all"; const openDesc = new Set();
+function menuItems() {
+  const L = settings.slot_minutes, out = [
+    { cat: "trial", key: "trial", icon: "trial", name: "初回体験", price: yen(settings.trial_price) + "（税込）", per: L + "分", tags: ["初めての方限定"], action: "book" },
+    { cat: "personal", key: "personal", icon: "personal", name: "パーソナルトレーニング", price: yen(settings.single_price) + "（税込）", per: L + "分", tags: ["都度払い", "回数券が使えます"], action: "book" },
+  ];
+  const tickets = plans.filter((p) => p.grp === "ticket");
+  if (tickets.length) { const min = tickets.reduce((a, b) => (a.price < b.price ? a : b)), best = tickets.reduce((a, b) => (a.per < b.per ? a : b));
+    out.push({ cat: "plans", key: "tickets", icon: "ticket", name: "回数券", price: yen(min.price) + "（税込）〜", per: tickets.map((t) => t.sessions + "回").join("・"), tags: ["回数券", "1回" + yen(best.per) + "〜"], action: "plans" }); }
+  for (const p of plans.filter((x) => x.grp === "monthly")) out.push({ cat: "plans", key: p.id, icon: "monthly", name: p.label, price: yen(p.price) + "（税込）", per: "月", tags: ["月額プラン", "1回" + yen(p.per)], action: "plans", plan: p.id });
+  return out;
+}
+function renderHome() {
+  if (!settings) return;
+  $("filters").innerHTML = CATS.map((c) => `<div class="frow ${cat === c.id ? "on" : ""}">
+      <button type="button" class="fpick" data-cat="${c.id}" aria-pressed="${cat === c.id}"><span class="radio" aria-hidden="true"></span>${esc(c.label)}</button>
+      ${c.desc ? `<button type="button" class="btn outline xs" data-desc="${c.id}" aria-expanded="${openDesc.has(c.id)}">詳細</button>` : ""}
+      ${c.desc && openDesc.has(c.id) ? `<p class="fdesc">${esc(c.desc)}</p>` : ""}</div>`).join("");
+  const items = menuItems().filter((m) => cat === "all" || m.cat === cat);
+  $("menus").innerHTML = items.map((m) => `<article class="mcard">
+      <div class="thumb t-${m.icon}" data-photo="assets/menu-${m.key}.jpg"><svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[m.icon]}</svg></div>
+      <div class="minfo"><h3>${esc(m.name)}</h3><p class="mprice"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 12.5V4.5h8l9 9-8 8z"/><circle cx="8" cy="9" r="1.3"/></svg>${esc(m.price)}／${esc(m.per)}</p></div>
+      <div class="mfoot"><div class="tags">${m.tags.map((t) => `<span class="tag">${esc(t)}</span>`).join("")}</div>
+        <button type="button" class="btn sm" data-go="${m.action}" data-key="${m.key}" ${m.plan ? `data-plan="${m.plan}"` : ""}>${m.action === "book" ? "予約する" : "申し込む"}</button></div>
+    </article>`).join("") || `<p class="empty" style="margin:16px">このメニューは準備中です</p>`;
+  loadPhotos();
+}
+// 写真（assets/hero.jpg, assets/menu-*.jpg）が置かれていれば表示し、なければイラストのまま
+function loadPhotos() {
+  document.querySelectorAll("[data-photo]").forEach((el) => { const src = el.dataset.photo; el.removeAttribute("data-photo");
+    const im = new Image(); im.onload = () => { el.style.backgroundImage = `url("${src}")`; el.classList.add("has-photo"); }; im.src = src; });
+}
+$("filters").addEventListener("click", (e) => {
+  const p = e.target.closest("[data-cat]"); if (p) { cat = p.dataset.cat; renderHome(); return; }
+  const d = e.target.closest("[data-desc]"); if (d) { openDesc.has(d.dataset.desc) ? openDesc.delete(d.dataset.desc) : openDesc.add(d.dataset.desc); renderHome(); }
+});
+$("menus").addEventListener("click", (e) => { const b = e.target.closest("[data-go]"); if (!b) return;
+  if (b.dataset.go === "book") { sel.menu = b.dataset.key; sel.pay = null; sel.time = null; showTab("book"); }
+  else { sel.plan = b.dataset.plan || null; showTab("plans"); renderPlans(); if (sel.plan) setTimeout(() => $("applyForm").scrollIntoView({ behavior: "smooth", block: "nearest" }), 300); }
+});
+$("toAvail").addEventListener("click", () => { sel.menu = null; sel.time = null; showTab("book"); });
+$("toPlans").addEventListener("click", () => showTab("plans"));
+function renderPicked() {
+  const m = sel.menu && menuItems().find((x) => x.key === sel.menu);
+  $("picked").hidden = !m;
+  if (m) $("picked").innerHTML = `<span><small>選んだメニュー</small><b>${esc(m.name)}</b> ${esc(m.price)}／${esc(m.per)}</span><button type="button" class="btn outline xs" id="pickChange">変更</button>`;
+}
+$("picked").addEventListener("click", (e) => { if (e.target.closest("#pickChange")) { sel.menu = null; showTab("home"); } });
 
 /* ---------- 読み込み ---------- */
 const rankOf = (id) => ranks.find((r) => r.id === id) || { label: "", fee: 0 };
@@ -221,8 +297,11 @@ function payOptions(date) {
   for (const p of (me && me.passes) || []) {
     if (p.left > 0 && date >= p.starts_on && date <= p.expires_on) opts.push({ v: "pass:" + p.id, label: p.label + "を使う", sub: `残り${p.left}回 → ${p.left - 1}回 ・ 期限 ${fmtShort(p.expires_on)}`, due: 0 });
   }
-  if (!me || me.trial_eligible) opts.push({ v: "trial", label: "初回体験", sub: "初めての方限定", due: settings.trial_price });
+  const trialOk = !me || me.trial_eligible;
+  if (trialOk && sel.menu !== "personal") opts.push({ v: "trial", label: "初回体験", sub: "初めての方限定", due: settings.trial_price });
   opts.push({ v: "single", label: "都度払い", sub: "1回ごとのお支払い", due: settings.single_price });
+  // 初回体験を選んで来た人には体験を一番上に
+  if (sel.menu === "trial") opts.sort((a, b) => (b.v === "trial") - (a.v === "trial"));
   return opts;
 }
 function nomFee() { return sel.trainer === "any" ? 0 : rankOf((trainerById(sel.trainer) || {}).rank_id).fee; }
@@ -234,6 +313,7 @@ function renderForm() {
   $("formWhen").textContent = fmtDate(sel.date) + " " + sel.time + "〜" + (t ? t.end : "") + " ・ " + (sel.trainer === "any" ? "トレーナー指名なし" : trainerById(sel.trainer).name + "を指名");
   const opts = payOptions(sel.date);
   if (!opts.some((o) => o.v === sel.pay)) sel.pay = opts[0].v;
+  $("trialNote").hidden = !(sel.menu === "trial" && me && !me.trial_eligible);
   $("pays").innerHTML = opts.map((o, i) => `<label class="pay"><input type="radio" name="pay" id="pay-${i}" value="${esc(o.v)}" ${o.v === sel.pay ? "checked" : ""}><b>${esc(o.label)}</b><em>${o.due ? yen(o.due) : "チケット1回"}</em><span>${esc(o.sub)}</span></label>`).join("");
   const o = opts.find((x) => x.v === sel.pay), fee = nomFee();
   $("lines").innerHTML = `<div><span>${esc(o.label.replace("を使う", ""))}</span><span>${o.due ? yen(o.due) : "0円（チケット使用）"}</span></div>` + (fee ? `<div><span>指名料（${esc(rankOf(trainerById(sel.trainer).rank_id).label)}トレーナー）</span><span>${yen(fee)}</span></div>` : "");
@@ -242,7 +322,7 @@ function renderForm() {
 }
 $("pays").addEventListener("change", (e) => { if (e.target.name === "pay") { sel.pay = e.target.value; renderForm(); } });
 $("formCancel").addEventListener("click", () => { sel.time = null; renderBook(); });
-function renderBook() { renderTrainers(); renderDays(); renderTrainerInfo(); renderBoard(); renderForm(); }
+function renderBook() { if (!settings) return; renderPicked(); renderTrainers(); renderDays(); renderTrainerInfo(); renderBoard(); renderForm(); }
 
 $("form").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -361,7 +441,8 @@ $("applyForm").addEventListener("submit", async (e) => { e.preventDefault();
   if (isNew) { $("doneWhen").textContent = p.label + "を申し込みました"; $("doneUrl").value = myPageUrl(data.token); $("done").hidden = false; $("done").scrollIntoView({ behavior: "smooth" }); }
 });
 
-function renderAll() { renderBook(); renderMine(); renderPlans(); $("who").textContent = me ? me.name + " さま" : ""; }
+(function () { const im = new Image(); im.onload = () => { $("cover").style.backgroundImage = 'url("assets/hero.jpg")'; $("cover").classList.add("has-photo"); }; im.src = "assets/hero.jpg"; })();
+function renderAll() { renderHome(); renderBook(); renderMine(); renderPlans(); $("who").textContent = me ? me.name + " さま" : ""; }
 
 /* ---------- 起動 ---------- */
 (async () => {
@@ -370,8 +451,9 @@ function renderAll() { renderBook(); renderMine(); renderPlans(); $("who").textC
     await Promise.all([loadBusy(), loadMe()]);
     renderAll();
     if (new URLSearchParams(location.search).get("me") && me) showTab("mine");
+    else if (location.hash === "#book") showTab("book"); else if (location.hash === "#plans") showTab("plans");
   } catch (e) {
-    $("trainers").innerHTML = "";
+    $("trainers").innerHTML = ""; $("menus").innerHTML = "";
     banner("予約情報を読み込めませんでした。通信状況を確認して、ページを開き直してください。", true);
   }
   setInterval(async () => { if (document.hidden || !settings) return; try { await loadBusy(); renderBook(); } catch (e) {} }, 60000);
