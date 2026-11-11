@@ -57,6 +57,34 @@
       <div id="adminList"><p class="loading">読み込み中…</p></div>
     </section>
 
+    <section class="tab" id="tab-karte" hidden>
+      <button class="btn ghost sm" type="button" id="k-back" style="align-self:flex-start">← 戻る</button>
+      <div class="sheet">
+        <div class="hd" style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline"><h2 id="k-name" style="margin:0"></h2><span class="sub" id="k-meta" style="margin:0"></span></div>
+        <div class="sub" id="k-contact" style="margin:0"></div>
+        <div id="k-last"></div>
+        <div class="field"><label for="k-goal">目的・目標</label><textarea id="k-goal" placeholder="例：3か月で-5kg、肩こり改善"></textarea></div>
+        <div class="field"><label for="k-health">けが・持病・注意点</label><textarea id="k-health" placeholder="例：腰椎ヘルニア歴あり。前屈は控えめに"></textarea></div>
+        <button class="btn ghost sm" type="button" id="k-saveInfo" style="align-self:flex-start">基本情報を保存</button>
+        <p class="sub" style="margin:0">カルテはトレーナーだけが見られます。お客さんのマイページには表示されません。</p>
+      </div>
+      <form class="sheet" id="k-form">
+        <h3 id="k-formTitle">記録を書く</h3>
+        <div class="row">
+          <div class="field"><label for="k-date">日付</label><input type="date" id="k-date"></div>
+          <div class="field"><label for="k-trainer">担当</label><select id="k-trainer"></select></div>
+        </div>
+        <div class="field"><label for="k-menu">やった内容</label><textarea id="k-menu" style="min-height:120px" placeholder="例：スクワット 40kg×10×3&#10;ベンチプレス 30kg×10×3&#10;ストレッチ 15分"></textarea></div>
+        <div class="row">
+          <div class="field"><label for="k-weight">体重（kg・任意）</label><input type="number" id="k-weight" step="0.1" min="20" max="300" inputmode="decimal"></div>
+          <div class="field"><label for="k-fat">体脂肪（%・任意）</label><input type="number" id="k-fat" step="0.1" min="1" max="70" inputmode="decimal"></div>
+        </div>
+        <div class="field"><label for="k-next">次回への申し送り</label><textarea id="k-next" placeholder="例：右膝に違和感。次回は下半身軽めに"></textarea></div>
+        <div class="row"><button type="button" class="btn ghost" id="k-formReset" hidden>新しい記録にする</button><button type="submit" class="btn" id="k-submit">記録を保存</button></div>
+      </form>
+      <div><p class="label">これまでの記録</p><div class="list" id="k-list"></div></div>
+    </section>
+
     <section class="tab" id="tab-cust" hidden>
       <div class="field"><label for="c-search">お客さんを探す</label><input id="c-search" placeholder="名前・電話番号で絞り込み"></div>
       <div class="list" id="custList"></div>
@@ -88,7 +116,7 @@
 <script>
 (function () {
 const { sb, WD, $, esc, pad, yen, jstNow, ymd, today, parseYmd, fmtDate, fmtShort, hm, startOf, toast, banner, copy, myPageUrl, errText, fmtMin, weekSchedule, trainerOpen } = APP;
-let settings = null, trainers = [], ranks = [], plans = [], open = [], customers = [], usage = [], blocks = [];
+let settings = null, trainers = [], ranks = [], plans = [], open = [], customers = [], usage = [], blocks = [], notes = [];
 const apending = new Set();
 
 /* ---------- ログイン ---------- */
@@ -134,16 +162,18 @@ async function enter() {
 
 /* ---------- タブ ---------- */
 $("tabs").addEventListener("click", (e) => { const b = e.target.closest("button[data-tab]"); if (b) showTab(b.dataset.tab); });
+let lastTab = "admin";
 function showTab(name) {
   document.querySelectorAll("#tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === name));
-  ["admin", "cust", "settings"].forEach((n) => ($("tab-" + n).hidden = n !== name));
+  ["admin", "cust", "settings", "karte"].forEach((n) => ($("tab-" + n).hidden = n !== name));
+  if (name !== "karte") lastTab = name;
   if (name === "settings") fillSettingsForm();
 }
 
 /* ---------- 読み込み ---------- */
 const rankOf = (id) => ranks.find((r) => r.id === id) || { label: "", fee: 0 };
 async function loadAll() {
-  const [s, t, r, p, b, c, u, k] = await Promise.all([
+  const [s, t, r, p, b, c, u, k, n] = await Promise.all([
     sb.from("settings").select("*").eq("id", 1).single(),
     sb.from("trainers").select("*").order("sort").order("created_at"),
     sb.from("ranks").select("*").order("sort"),
@@ -152,12 +182,13 @@ async function loadAll() {
     sb.from("customers").select("*, passes(*), applications(*)").order("created_at", { ascending: false }),
     sb.from("bookings").select("customer_id,pass_id,status"),
     sb.from("blocks").select("*").gte("on_date", today()).order("on_date").order("start_time"),
+    sb.from("session_notes").select("*").order("on_date", { ascending: false }).order("created_at", { ascending: false }),
   ]);
-  const err = [s, t, r, p, b, c, u, k].find((x) => x.error);
+  const err = [s, t, r, p, b, c, u, k, n].find((x) => x.error);
   if (err) { banner("読み込めませんでした。ページを開き直してください。", true); return; }
-  settings = s.data; trainers = t.data; ranks = r.data; plans = p.data; open = b.data; customers = c.data; usage = u.data; blocks = k.data;
+  settings = s.data; trainers = t.data; ranks = r.data; plans = p.data; open = b.data; customers = c.data; usage = u.data; blocks = k.data; notes = n.data;
   $("studioName").textContent = settings.name;
-  renderAdmin(); renderCust(); if (!$("hold").hidden) renderHold();
+  renderAdmin(); renderCust(); if (!$("hold").hidden) renderHold(); if (!$("tab-karte").hidden) renderKarte();
 }
 $("reload").addEventListener("click", async () => { await loadAll(); toast("最新の状態にしました"); });
 
@@ -171,7 +202,15 @@ function rowHtml(b, mode) {
   if (mode === "past") acts = ask("done", "受講済み") + ask("late", "無断キャンセル（消化）", "danger") + ask("void", "取消（消化なし）", "danger");
   else acts = (today() >= b.on_date ? ask("late", "当日キャンセル（消化）", "danger") : "") + ask("void", "取消（消化なし）", "danger");
   const due = (b.price || 0) + (b.fee || 0), c = b.customers || {};
-  return `<div class="item"><div><div class="tm">${hm(b.start_time)}</div><div class="dt">${esc(b.trainers && b.trainers.name)}</div></div><div class="meta"><div class="nm">${esc(c.name)} ${b.nominated ? '<span class="pill mine">指名</span>' : ""}${mode === "up" && outOfShift(b) ? '<span class="pill warn">勤務時間外</span>' : ""}</div><div class="dd">${esc(c.contact)}</div><div class="dd">${esc(payLabel(b))}${due ? " ・ 受け取り " + yen(due) : ""}</div>${b.note ? `<div class="dd">メモ：${esc(b.note)}</div>` : ""}</div><div class="acts">${acts}</div></div>`;
+  return `<div class="item"><div><div class="tm">${hm(b.start_time)}</div><div class="dt">${esc(b.trainers && b.trainers.name)}</div></div><div class="meta"><div class="nm">${esc(c.name)} ${b.nominated ? '<span class="pill mine">指名</span>' : ""}${mode === "up" && outOfShift(b) ? '<span class="pill warn">勤務時間外</span>' : ""}</div><div class="dd">${esc(c.contact)}</div><div class="dd">${esc(payLabel(b))}${due ? " ・ 受け取り " + yen(due) : ""}</div>${b.note ? `<div class="dd">メモ：${esc(b.note)}</div>` : ""}${handoffHtml(b)}</div><div class="acts">${karteBtn(b, mode)}${acts}</div></div>`;
+}
+function handoffHtml(b) {
+  const last = notesFor(b.customer_id).find((x) => x.on_date <= b.on_date && x.booking_id !== b.id);
+  return last && last.next_note ? `<div class="handoff"><b>前回の申し送り（${fmtShort(last.on_date)}）</b>${esc(last.next_note)}</div>` : "";
+}
+function karteBtn(b, mode) {
+  const has = notes.some((x) => x.booking_id === b.id);
+  return `<button class="btn sm ${mode === "past" && !has ? "" : "ghost"}" data-kb="${b.id}">${has ? "カルテを見る" : mode === "past" ? "カルテを書く" : "カルテ"}</button>`;
 }
 function holdRowHtml(x) {
   const k = "H" + x.id, t = trainers.find((y) => y.id === x.trainer_id);
@@ -204,6 +243,7 @@ async function settle(id, kind) {
   const { error } = await q; if (error) throw error;
 }
 $("adminList").addEventListener("click", async (e) => { const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.kb) { const bk = open.find((x) => x.id === b.dataset.kb); if (bk) openKarte(bk.customer_id, bk); return; }
   if (b.dataset.hask) { apending.add("H" + b.dataset.hask); renderAdmin(); return; }
   if (b.dataset.hstop) { apending.delete("H" + b.dataset.hstop); renderAdmin(); return; }
   if (b.dataset.hgo) { b.disabled = true; const { error } = await sb.from("blocks").delete().eq("id", b.dataset.hgo);
@@ -312,6 +352,82 @@ $("hold").addEventListener("submit", async (e) => {
   await loadAll();
 });
 
+/* ---------- カルテ ---------- */
+const kst = { cid: null, editId: null, booking: null };
+const notesFor = (cid) => notes.filter((x) => x.customer_id === cid);
+const tname = (id) => { const t = trainers.find((x) => x.id === id); return t ? t.name : "—"; };
+function openKarte(cid, booking) {
+  kst.cid = cid; kst.editId = null; kst.booking = booking || null;
+  const c = customers.find((x) => x.id === cid); if (!c) { toast("お客さんの情報が見つかりません"); return; }
+  $("k-goal").value = c.goal || ""; $("k-health").value = c.health_notes || "";
+  const existing = booking && notes.find((x) => x.booking_id === booking.id);
+  if (existing) fillNoteForm(existing); else resetNoteForm();
+  showTab("karte"); renderKarte(); window.scrollTo({ top: 0 });
+}
+function resetNoteForm() {
+  kst.editId = null; const bk = kst.booking;
+  $("k-date").value = bk ? bk.on_date : today();
+  $("k-trainer").innerHTML = trainers.map((t) => `<option value="${t.id}">${esc(t.name)}${t.active ? "" : "（退職）"}</option>`).join("");
+  $("k-trainer").value = bk ? bk.trainer_id : ((trainers.find((t) => t.active) || {}).id || "");
+  ["k-menu", "k-weight", "k-fat", "k-next"].forEach((id) => ($(id).value = ""));
+  $("k-formTitle").textContent = bk ? `記録を書く（${fmtDate(bk.on_date)} ${hm(bk.start_time)}の予約）` : "記録を書く";
+  $("k-submit").textContent = "記録を保存"; $("k-formReset").hidden = true;
+}
+function fillNoteForm(x) {
+  kst.editId = x.id;
+  $("k-trainer").innerHTML = trainers.map((t) => `<option value="${t.id}">${esc(t.name)}${t.active ? "" : "（退職）"}</option>`).join("");
+  $("k-date").value = x.on_date; $("k-trainer").value = x.trainer_id || "";
+  $("k-menu").value = x.menu || ""; $("k-weight").value = x.body_weight ?? ""; $("k-fat").value = x.body_fat ?? ""; $("k-next").value = x.next_note || "";
+  $("k-formTitle").textContent = fmtDate(x.on_date) + "の記録を直す"; $("k-submit").textContent = "直した内容を保存"; $("k-formReset").hidden = false;
+}
+function renderKarte() {
+  const c = customers.find((x) => x.id === kst.cid); if (!c) return;
+  const list = notesFor(c.id), visits = usage.filter((u) => u.customer_id === c.id && u.status === "done").length;
+  $("k-name").textContent = c.name + " さんのカルテ"; $("k-contact").textContent = c.contact;
+  $("k-meta").textContent = `受講${visits}回・記録${list.length}件`;
+  const last = list.find((x) => x.next_note);
+  $("k-last").innerHTML = last ? `<div class="handoff"><b>前回の申し送り（${fmtShort(last.on_date)}・${esc(tname(last.trainer_id))}）</b>${esc(last.next_note)}</div>` : "";
+  const weights = list.filter((x) => x.body_weight != null);
+  $("k-list").innerHTML = list.length ? list.map((x, i) => {
+    const prevW = weights.find((w) => w.on_date < x.on_date || (w.on_date === x.on_date && w.created_at < x.created_at));
+    const diff = x.body_weight != null && prevW ? (x.body_weight - prevW.body_weight) : null;
+    const del = apending.has("K" + x.id) ? `<button class="btn sm danger" type="button" data-kdgo="${x.id}">削除する</button><button class="btn sm ghost" type="button" data-kdstop="${x.id}">やめる</button>` : `<button class="btn sm ghost" type="button" data-kdel="${x.id}">削除</button>`;
+    return `<div class="note-rec"><div class="nh"><b>${fmtDate(x.on_date)}</b><span class="sub" style="margin:0">担当 ${esc(tname(x.trainer_id))}</span></div>
+      ${x.body_weight != null || x.body_fat != null ? `<div class="body">${x.body_weight != null ? `体重 <b>${x.body_weight}</b>kg${diff != null ? `<span class="diff">（${diff > 0 ? "+" : ""}${diff.toFixed(1)}）</span>` : ""}` : ""}${x.body_fat != null ? `　体脂肪 <b>${x.body_fat}</b>%` : ""}</div>` : ""}
+      ${x.menu ? `<div class="menu">${esc(x.menu)}</div>` : ""}
+      ${x.next_note ? `<div class="dd"><b>申し送り：</b>${esc(x.next_note)}</div>` : ""}
+      <div class="acts"><button class="btn sm ghost" type="button" data-kedit="${x.id}">直す</button>${del}</div></div>`; }).join("")
+    : `<div class="empty">まだ記録はありません。上のフォームから最初の記録を書いてください。</div>`;
+}
+$("k-back").addEventListener("click", () => showTab(lastTab || "admin"));
+$("k-formReset").addEventListener("click", () => { kst.booking = null; resetNoteForm(); });
+$("k-saveInfo").addEventListener("click", async () => {
+  const { error } = await sb.from("customers").update({ goal: $("k-goal").value.trim() || null, health_notes: $("k-health").value.trim() || null }).eq("id", kst.cid);
+  toast(error ? "保存できませんでした。もう一度お試しください。" : "基本情報を保存しました");
+  if (!error) { const c = customers.find((x) => x.id === kst.cid); if (c) { c.goal = $("k-goal").value.trim(); c.health_notes = $("k-health").value.trim(); } }
+});
+$("k-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const num = (id) => { const v = $(id).value.trim(); return v === "" ? null : Number(v); };
+  const row = { customer_id: kst.cid, on_date: $("k-date").value || today(), trainer_id: $("k-trainer").value || null,
+    menu: $("k-menu").value.trim() || null, body_weight: num("k-weight"), body_fat: num("k-fat"), next_note: $("k-next").value.trim() || null, updated_at: new Date().toISOString() };
+  if (!row.menu && !row.next_note && row.body_weight == null && row.body_fat == null) { toast("やった内容か申し送りを入力してください"); return; }
+  const btn = $("k-submit"); btn.disabled = true;
+  const q = kst.editId ? sb.from("session_notes").update(row).eq("id", kst.editId)
+    : sb.from("session_notes").insert({ ...row, booking_id: kst.booking && !notes.some((x) => x.booking_id === kst.booking.id) ? kst.booking.id : null });
+  const { error } = await q; btn.disabled = false;
+  if (error) { toast("保存できませんでした。もう一度お試しください。"); return; }
+  toast(kst.editId ? "記録を直しました" : "記録を保存しました");
+  kst.booking = null; resetNoteForm(); await loadAll();
+});
+$("k-list").addEventListener("click", async (e) => { const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.kedit) { const x = notes.find((y) => y.id === b.dataset.kedit); if (x) { fillNoteForm(x); $("k-form").scrollIntoView({ behavior: "smooth" }); } return; }
+  if (b.dataset.kdel) { apending.add("K" + b.dataset.kdel); renderKarte(); return; }
+  if (b.dataset.kdstop) { apending.delete("K" + b.dataset.kdstop); renderKarte(); return; }
+  if (b.dataset.kdgo) { b.disabled = true; const { error } = await sb.from("session_notes").delete().eq("id", b.dataset.kdgo);
+    apending.delete("K" + b.dataset.kdgo); toast(error ? "削除できませんでした。" : "記録を削除しました"); if (kst.editId === b.dataset.kdgo) resetNoteForm(); await loadAll(); }
+});
+
 /* ---------- お客さん ---------- */
 function passLeft(p) { const n = usage.filter((u) => u.pass_id === p.id).length; return p.sessions + p.bonus - n; }
 function renderCust() {
@@ -327,11 +443,13 @@ function renderCust() {
     const passes = c.passes.filter((p) => today() <= p.expires_on).map((p) => `<div class="mini"><span>${esc(p.label)}</span><span><b style="font-family:var(--mono)">${passLeft(p)}</b>/${p.sessions + p.bonus}回 ・ 期限 ${fmtShort(p.expires_on)}</span></div>`).join("");
     return `<div class="cust"><div class="hd"><b>${esc(c.name)}</b><span class="sm">受講${visits}回</span></div><div class="sm">${esc(c.contact)}</div>${apps}${passes}
       <div class="mini"><label for="add-${c.id}" class="sm">プランを追加（店頭で支払い済み）</label><span class="row" style="flex:1 1 220px"><select id="add-${c.id}">${plans.filter((p) => p.active).map((p) => `<option value="${esc(p.id)}">${esc(p.label)} ${yen(p.price)}</option>`).join("")}</select><button class="btn sm ghost" data-add="${c.id}" style="flex:0 0 auto">追加</button></span></div>
-      <div class="mini"><span class="sm">マイページURL（お客さんに再送するとき）</span><button class="btn sm ghost" data-url="${esc(c.token)}">コピー</button></div></div>`;
+      <div class="mini"><span class="sm">マイページURL（お客さんに再送するとき）</span><button class="btn sm ghost" data-url="${esc(c.token)}">コピー</button></div>
+      <button class="btn sm" data-karte="${c.id}" style="align-self:flex-start">カルテを開く${notesFor(c.id).length ? "（" + notesFor(c.id).length + "件）" : ""}</button></div>`;
   }).join("");
 }
 $("c-search").addEventListener("input", renderCust);
 $("custList").addEventListener("click", async (e) => { const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.karte) { openKarte(b.dataset.karte); return; }
   if (b.dataset.url) { copy(myPageUrl(b.dataset.url)); return; }
   if (b.dataset.aask) { apending.add("A" + b.dataset.aask); renderCust(); return; }
   if (b.dataset.astop) { apending.delete("A" + b.dataset.astop); renderCust(); return; }

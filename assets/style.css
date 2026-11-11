@@ -158,3 +158,12 @@ details ul{margin:0;padding-left:1.2em;font-size:13px;color:var(--muted)}
 .shift .reset{grid-column:1/-1;justify-self:end;border:0;background:transparent;color:var(--ink);font:700 12px var(--body);text-decoration:underline;padding:0 2px;cursor:pointer}
 details.weekly{background:transparent;padding:10px 12px}
 @media (max-width:420px){.shift.dayrow{grid-template-columns:4.6em auto 1fr auto 1fr;gap:4px}.shift select{padding:6px 4px;font-size:14px}.shift label.on{font-size:12px}}
+.handoff{background:var(--mine-soft);border-radius:8px;padding:8px 10px;font-size:13px;margin-top:6px;overflow-wrap:anywhere;white-space:pre-wrap}
+.handoff b{display:block;font-size:11px;letter-spacing:.04em;margin-bottom:2px}
+.note-rec{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.note-rec .nh{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline}
+.note-rec .menu{white-space:pre-wrap;font-size:14px;overflow-wrap:anywhere;border-left:3px solid var(--accent);padding-left:10px}
+.note-rec .body{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.note-rec .body b{color:var(--ink);font-family:var(--mono)}
+.note-rec .diff{font-family:var(--mono)}
+.note-rec .acts{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
