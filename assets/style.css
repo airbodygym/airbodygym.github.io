@@ -1,29 +1,33 @@
 /* AIR BODY GYM 予約サイト — 受付タブレットのような一列レイアウト */
 :root{
-  --bg:#F2F4F3; --surface:#FFFFFF; --ink:#16201E; --muted:#5E6B68; --line:#D9DFDD;
-  --accent:#0E6B62; --accent-ink:#FFFFFF; --accent-soft:#DCEDEA;
-  --warn:#A3471B; --warn-soft:#F7E6DC; --mine:#C98A00; --mine-soft:#FBF0D3; --sat:#3B6FD6;
-  --display:"Dela Gothic One","Zen Kaku Gothic New",system-ui,sans-serif;
+  /* 明るく爽やか：空気のような白と、AIR の空色。ロゴの墨色を文字色に使う */
+  --bg:#F4F8FB; --surface:#FFFFFF; --ink:#0F1A24; --muted:#5A6A79; --line:#DCE5EE;
+  --accent:#1683E8; --accent-ink:#FFFFFF; --accent-soft:#E3F0FD; --accent-deep:#0B5FB0;
+  --warn:#C24A1E; --warn-soft:#FCEBE3; --mine:#E0A100; --mine-soft:#FFF5D6; --sat:#2F6FE0;
+  --display:"Outfit","Zen Kaku Gothic New",system-ui,sans-serif;
   --body:"Zen Kaku Gothic New","Hiragino Sans","Yu Gothic",system-ui,sans-serif;
-  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  --mono:"Outfit","Zen Kaku Gothic New",system-ui,sans-serif;
   color-scheme:light;
 }
-@media (prefers-color-scheme: dark){:root{
-  --bg:#0F1514; --surface:#18201F; --ink:#E6ECEA; --muted:#97A5A1; --line:#2B3533;
-  --accent:#3FB8A9; --accent-ink:#0B1413; --accent-soft:#16332F;
-  --warn:#F0956A; --warn-soft:#3A2218; --mine:#F2C04E; --mine-soft:#3A3016; --sat:#7FA6F0; color-scheme:dark}}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html{-webkit-text-size-adjust:100%}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.6;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0;background:linear-gradient(180deg,#E4F1FD 0,var(--bg) 320px) no-repeat var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.6;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 .wrap{max-width:640px;margin:0 auto;padding-block:20px 56px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:18px}
 header{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}
-.brand{font-family:var(--display);font-weight:400;font-size:26px;line-height:1.2;letter-spacing:.03em;margin:0}
+.brand{margin:0;line-height:0}
+.logo{display:block;width:120px;height:auto;max-width:100%}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+header.hero{flex-direction:column;align-items:center;text-align:center;gap:10px;padding-block:18px 6px}
+header.hero > div{display:flex;flex-direction:column;align-items:center;gap:10px}
+header.hero .logo{width:168px}
+.tagline{margin:0;font-size:15px;font-weight:700;letter-spacing:.06em;text-wrap:balance}
+header.hero .who:empty{display:none}
 .sub{color:var(--muted);font-size:13px;margin:2px 0 0}
 .who{font-size:12px;color:var(--muted)}
-nav{display:flex;gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:4px;overflow-x:auto;position:sticky;top:env(safe-area-inset-top,0px);z-index:5}
-nav button{flex:1 0 auto;white-space:nowrap;border:0;background:none;color:var(--muted);font:500 14px var(--body);padding:9px 12px;border-radius:9px;cursor:pointer}
-nav button[aria-selected="true"]{background:var(--ink);color:var(--bg)}
+nav{display:flex;gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:4px;box-shadow:0 2px 10px rgba(22,131,232,.08);overflow-x:auto;position:sticky;top:env(safe-area-inset-top,0px);z-index:5}
+nav button{flex:1 0 auto;white-space:nowrap;border:0;background:none;color:var(--muted);font:500 14px var(--body);padding:9px 12px;border-radius:999px;cursor:pointer}
+nav button[aria-selected="true"]{background:var(--accent);color:var(--accent-ink);font-weight:700}
 button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 a{color:var(--accent)}
 section.tab{display:flex;flex-direction:column;gap:18px}
@@ -36,10 +40,12 @@ section.tab{display:flex;flex-direction:column;gap:18px}
 .days{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin}
 .day{flex:0 0 58px;border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:8px 0;text-align:center;cursor:pointer;color:var(--ink);font-family:var(--body)}
 .day .dw{font-size:11px;color:var(--muted);display:block}
-.day .dn{font:600 20px var(--mono);display:block;line-height:1.3}
+.day .dn{font:600 21px var(--mono);display:block;line-height:1.3}
 .day .dm{font-size:10px;color:var(--muted);display:block}
 .day.sat .dw{color:var(--sat)}.day.sun .dw{color:var(--warn)}
-.day[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.day[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.day[aria-pressed="true"] .dw,.day[aria-pressed="true"] .dm{color:var(--accent-ink)!important}
+.day[aria-pressed="true"] .dot{background:var(--accent-ink)}
 .day:disabled{opacity:.4;cursor:default}
 .day .dot{display:block;width:6px;height:6px;border-radius:50%;margin:4px auto 0;background:var(--accent)}
 .day .dot.none{background:transparent}
@@ -78,7 +84,7 @@ input,textarea,select{font:16px var(--body);color:var(--ink);background:var(--bg
 textarea{min-height:72px;resize:vertical}
 .row{display:flex;gap:10px;flex-wrap:wrap}
 .row>*{flex:1 1 140px;min-width:0}
-.btn{border:0;border-radius:10px;padding:12px 18px;font:700 15px var(--body);cursor:pointer;background:var(--accent);color:var(--accent-ink);text-align:center;text-decoration:none}
+.btn{border:0;border-radius:999px;padding:12px 20px;box-shadow:0 2px 8px rgba(22,131,232,.18);font:700 15px var(--body);cursor:pointer;background:var(--accent);color:var(--accent-ink);text-align:center;text-decoration:none}
 .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
 .btn.danger{background:var(--warn);color:var(--surface)}
 .btn:disabled{opacity:.5;cursor:default}
@@ -118,7 +124,7 @@ textarea{min-height:72px;resize:vertical}
 .lines div{display:flex;justify-content:space-between;gap:10px}
 .pgroup{display:flex;flex-direction:column;gap:8px}
 .pgroup h3{margin:0;font-size:15px;display:flex;align-items:center;gap:8px}
-.badge{font-size:11px;background:var(--mine);color:var(--surface);border-radius:999px;padding:1px 9px;transform:rotate(-4deg);display:inline-block}
+.badge{font-size:11px;background:var(--mine);color:var(--ink);font-weight:700;border-radius:999px;padding:1px 9px;transform:rotate(-4deg);display:inline-block}
 .plan{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:grid;grid-template-columns:1fr auto;gap:2px 12px;align-items:center}
 .plan .pn{font-weight:700}
 .plan .pp{font:600 17px var(--mono);text-align:right}
@@ -167,3 +173,11 @@ details.weekly{background:transparent;padding:10px 12px}
 .note-rec .body b{color:var(--ink);font-family:var(--mono)}
 .note-rec .diff{font-family:var(--mono)}
 .note-rec .acts{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+
+/* 明るいデザインの仕上げ */
+.btn.ghost,.btn.danger,.btn.sm{box-shadow:none}
+.btn:not(.ghost):not(.danger):hover{background:var(--accent-deep)}
+.sheet,.item,.pass,.plan,.cust,.note-rec,.stat,details{box-shadow:0 1px 3px rgba(15,26,36,.04)}
+.slot .t,.day .dn,.tm,.when,.total b,.pp,.left,.stat b{letter-spacing:.01em}
+.label{color:var(--accent-deep)}
+.note{background:var(--accent-soft)}
