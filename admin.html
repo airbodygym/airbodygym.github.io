@@ -116,7 +116,7 @@
           <div class="field"><label for="st-email">メールアドレス</label><input id="st-email" type="email" placeholder="trainer@example.com" autocomplete="off"></div>
           <div class="field"><label for="st-tr">どのトレーナー？</label><select id="st-tr"></select></div>
         </div>
-        <button type="button" class="btn ghost sm" id="st-add" style="align-self:flex-start">登録する</button>
+        <button type="button" class="btn sm" id="st-add" style="align-self:flex-start">このメールアドレスを登録する</button>
       </div>
       <button class="btn" type="submit" id="saveSettings">設定を保存</button>
       <button class="btn ghost sm" type="button" id="logout" style="align-self:flex-start">ログアウト</button>
@@ -562,12 +562,19 @@ function renderStaff() {
       ${apending.has(k) ? `<span class="row" style="flex:0 0 auto"><button type="button" class="btn sm danger" data-stgo="${esc(x.email)}">外す</button><button type="button" class="btn sm ghost" data-ststop="${esc(x.email)}">やめる</button></span>` : `<button type="button" class="btn sm ghost" data-stask="${esc(x.email)}">外す</button>`}</div>`; }).join("")
     : `<p class="sub" style="margin:0">まだ登録されていません。今はオーナーだけが管理画面を使えます。</p>`;
 }
-$("st-add").addEventListener("click", async () => {
+async function addStaff() {
   const email = $("st-email").value.trim().toLowerCase();
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { toast("メールアドレスを正しく入力してください"); return; }
+  if (!email) return true;
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { toast("管理画面を使える人：メールアドレスを正しく入力してください"); return false; }
   const { error } = await sb.from("staff").upsert({ email, trainer_id: $("st-tr").value || null });
-  if (error) { toast("登録できませんでした。もう一度お試しください。"); return; }
-  $("st-email").value = ""; toast(email + " を登録しました。このアドレスで新規登録してもらってください"); await loadAll(); renderStaff();
+  if (error) { toast("管理画面を使える人を登録できませんでした。もう一度お試しください。"); return false; }
+  $("st-email").value = ""; staffAdded = email; return true;
+}
+let staffAdded = null;
+$("st-add").addEventListener("click", async () => {
+  if (!$("st-email").value.trim()) { toast("メールアドレスを入力してください"); return; }
+  if (!(await addStaff())) return;
+  toast(staffAdded + " を登録しました。このアドレスで新規登録してもらってください"); staffAdded = null; await loadAll(); renderStaff();
 });
 $("staffList").addEventListener("click", async (e) => { const b = e.target.closest("button"); if (!b) return;
   if (b.dataset.stask) { apending.add("S" + b.dataset.stask); renderStaff(); return; }
@@ -602,6 +609,7 @@ $("tab-settings").addEventListener("submit", async (e) => { e.preventDefault(); 
     if (error) { toast(String(error.message).includes("NO_TRAINER") ? "あなたのアカウントがどのトレーナーか、まだ決まっていません。オーナーに設定してもらってください。" : "保存できませんでした。もう一度お試しください。"); return; }
     await loadAll(); fillSettingsForm(); toast("シフトを保存しました"); return;
   }
+  if (!(await addStaff())) { btn.disabled = false; return; }
   try {
     const s = await sb.from("settings").update({
       name: $("s-name").value.trim() || "AIR BODY GYM", open_hour, close_hour, slot_minutes,
@@ -620,7 +628,8 @@ $("tab-settings").addEventListener("submit", async (e) => { e.preventDefault(); 
     if (removed.length) { const r = await sb.from("trainers").update({ active: false }).in("id", removed); if (r.error) throw r.error; }
     await loadAll(); fillSettingsForm();
     const outside = open.filter((b) => endOf(b) > jstNow() && outOfShift(b)).length;
-    toast(outside ? `設定を保存しました。勤務時間外になった予約が${outside}件あります（予約一覧で確認できます）` : "設定を保存しました");
+    const extra = staffAdded ? `（${staffAdded} も管理画面を使える人に登録しました）` : ""; staffAdded = null;
+    toast((outside ? `設定を保存しました。勤務時間外になった予約が${outside}件あります（予約一覧で確認できます）` : "設定を保存しました") + extra);
   } catch (err) { toast("保存できませんでした。もう一度お試しください。"); }
   finally { btn.disabled = false; }
 });
