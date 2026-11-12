@@ -107,7 +107,8 @@
         <h3 id="nc-doneTitle"></h3>
         <p class="sub" style="margin:0">このURLをお客さんに送ると、予約の確認・キャンセルやチケットの残り回数を見られます。LINEなどで送ってください。</p>
         <div class="urlbox"><input id="nc-url" readonly aria-label="マイページURL"><button class="btn sm" type="button" id="nc-copy">コピー</button></div>
-        <div class="row"><button class="btn ghost" type="button" id="nc-close">閉じる</button><button class="btn" type="button" id="nc-book">このお客さんの予約を入れる</button></div>
+        <div class="row"><button class="btn ghost" type="button" id="nc-karte">カルテを開く</button><button class="btn" type="button" id="nc-book">このお客さんの予約を入れる</button></div>
+        <button class="btn ghost sm" type="button" id="nc-close" style="align-self:flex-start">閉じる</button>
       </div>
       <div class="field"><label for="c-search">お客さんを探す</label><input id="c-search" placeholder="名前・電話番号で絞り込み"></div>
       <div class="list" id="custList"></div>
@@ -491,6 +492,7 @@ $("nc-open").addEventListener("click", () => { $("nc").hidden = false; $("nc-ope
 $("nc-cancel").addEventListener("click", () => { $("nc").hidden = true; $("nc-open").hidden = false; });
 $("nc-close").addEventListener("click", () => { $("nc-done").hidden = true; $("nc-open").hidden = false; });
 $("nc-copy").addEventListener("click", () => copy($("nc-url").value, $("nc-url")));
+$("nc-karte").addEventListener("click", () => { if (!ncLast) return; $("nc-done").hidden = true; $("nc-open").hidden = false; openKarte(ncLast.id); });
 $("nc-book").addEventListener("click", () => { if (!ncLast) return; showTab("admin"); openHold({ customer: ncLast.id, pickCustomer: true }); $("nc-done").hidden = true; $("nc-open").hidden = false; });
 $("nc").addEventListener("submit", async (e) => {
   e.preventDefault();
