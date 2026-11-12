@@ -253,3 +253,8 @@ svg{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-l
 .staff-only{display:none}
 body.is-staff .staff-only{display:block}
 body.is-staff .owner-only{display:none!important}
+/* お支払いの選択肢：並び順を固定（ボタン｜名前｜金額、下に説明） */
+.pay input{grid-column:1;grid-row:1 / span 2}
+.pay b{grid-column:2;grid-row:1}
+.pay em{grid-column:3;grid-row:1;text-align:right}
+.pay span{grid-column:2 / -1;grid-row:2}

@@ -51,6 +51,10 @@
         <div class="field"><label for="h-date">日付</label><input type="date" id="h-date"></div>
         <div class="field"><span class="flabel">時間（いくつでも選べます）</span><div class="board" id="h-times"></div></div>
         <div class="field"><label for="h-who">だれの予約？</label><select id="h-who"></select><small id="h-whoHint"></small></div>
+        <div class="row" id="h-new" hidden>
+          <div class="field"><label for="h-newName">お名前</label><input id="h-newName" autocomplete="off" placeholder="山田 花子"></div>
+          <div class="field"><label for="h-newContact">電話番号またはメール</label><input id="h-newContact" autocomplete="off" placeholder="090-1234-5678"></div>
+        </div>
         <div id="h-payWrap" hidden class="field"><span class="flabel">お支払い</span><div class="pays" id="h-pays"></div>
           <label class="pay"><input type="checkbox" id="h-nom"><b>指名料をもらう</b><em></em><span id="h-nomFee"></span></label></div>
         <div class="field"><label for="h-note">メモ（任意）</label><input id="h-note" placeholder="例：山田さん 口約束／体験の方"></div>
@@ -88,6 +92,23 @@
     </section>
 
     <section class="tab" id="tab-cust" hidden>
+      <button class="btn" type="button" id="nc-open">＋ 新しいお客さんを登録</button>
+      <form class="sheet" id="nc" hidden>
+        <div><h3>新しいお客さんを登録</h3><p class="sub" style="margin:4px 0 0">電話や店頭で受けたお客さんを登録します。登録すると、そのお客さん専用のマイページURLができます。</p></div>
+        <div class="row">
+          <div class="field"><label for="nc-name">お名前</label><input id="nc-name" autocomplete="off" placeholder="山田 花子"></div>
+          <div class="field"><label for="nc-contact">電話番号またはメール</label><input id="nc-contact" autocomplete="off" placeholder="090-1234-5678"></div>
+        </div>
+        <div class="field"><label for="nc-goal">目的・目標（任意）</label><input id="nc-goal" placeholder="例：産後の体型戻し"></div>
+        <div class="field"><label for="nc-health">けが・持病・注意点（任意）</label><input id="nc-health" placeholder="例：右肩に痛みあり"></div>
+        <div class="row"><button type="button" class="btn ghost" id="nc-cancel">やめる</button><button type="submit" class="btn" id="nc-submit">登録する</button></div>
+      </form>
+      <div class="sheet" id="nc-done" hidden>
+        <h3 id="nc-doneTitle"></h3>
+        <p class="sub" style="margin:0">このURLをお客さんに送ると、予約の確認・キャンセルやチケットの残り回数を見られます。LINEなどで送ってください。</p>
+        <div class="urlbox"><input id="nc-url" readonly aria-label="マイページURL"><button class="btn sm" type="button" id="nc-copy">コピー</button></div>
+        <div class="row"><button class="btn ghost" type="button" id="nc-close">閉じる</button><button class="btn" type="button" id="nc-book">このお客さんの予約を入れる</button></div>
+      </div>
       <div class="field"><label for="c-search">お客さんを探す</label><input id="c-search" placeholder="名前・電話番号で絞り込み"></div>
       <div class="list" id="custList"></div>
     </section>
@@ -302,7 +323,8 @@ function openHold(pre) {
   hold.trainer = pre.trainer || hold.trainer || (act[0] && act[0].id);
   hold.date = pre.date || today(); hold.times = pre.times || []; hold.pay = null;
   $("h-date").min = today(); $("h-date").value = hold.date; $("h-note").value = pre.note || "";
-  $("h-who").innerHTML = `<option value="">メモだけで押さえる（お客さんはあとで決める）</option>` + customers.map((c) => `<option value="${c.id}">${esc(c.name)}（${esc(c.contact)}）</option>`).join("");
+  $("h-who").innerHTML = `<option value="">メモだけで押さえる（お客さんはあとで決める）</option><option value="__new">＋ 新しいお客さん（ここで登録する）</option>` + customers.map((c) => `<option value="${c.id}">${esc(c.name)}（${esc(c.contact)}）</option>`).join("");
+  $("h-who").value = pre.customer || ""; $("h-newName").value = ""; $("h-newContact").value = "";
   $("hold").hidden = false; $("holdOpen").hidden = true;
   renderHold();
   $("hold").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -313,6 +335,7 @@ function renderHold() {
   const act = trainers.filter((t) => t.active);
   $("h-tr").innerHTML = act.map((t) => `<button type="button" class="chip" data-ht="${t.id}" aria-pressed="${t.id === hold.trainer}">${esc(t.name)}</button>`).join("");
   const who = $("h-who").value;
+  $("h-new").hidden = who !== "__new";
   const lbl = { free: "空き", booked: "予約あり", held: "押さえ済み", offshift: "勤務外", past: "終了" };
   // 押さえ済みの枠は、お客さんを選んだときだけ「予約に切り替え」として選べる
   const selectable = (st) => st === "free" || st === "offshift" || (st === "held" && who);
@@ -320,7 +343,7 @@ function renderHold() {
   $("h-times").innerHTML = hold.date ? slotTimes().map((h) => { const st = holdState(hold.trainer, hold.date, h), on = hold.times.includes(h);
     const cls = st === "free" ? "" : st === "offshift" ? "off" : st === "held" ? "mine" : "taken";
     return `<button type="button" class="slot ${cls}" data-hh="${h}" aria-pressed="${on}" ${selectable(st) ? "" : "disabled"}><span class="t">${h}</span><span class="s">${on ? "選択中" : lbl[st]}</span></button>`; }).join("") : `<div class="empty" style="grid-column:1/-1">日付を選んでください</div>`;
-  $("h-whoHint").textContent = who ? "このお客さんの予約として入ります。お客さんのマイページにも表示されます。" : "名前なしで枠だけ締めます。あとで「お客さんの予約にする」で切り替えられます。";
+  $("h-whoHint").textContent = who === "__new" ? "お名前と連絡先を入れると、お客さんを登録してから予約を入れます。" : who ? "このお客さんの予約として入ります。お客さんのマイページにも表示されます。" : "名前なしで枠だけ締めます。あとで「お客さんの予約にする」で切り替えられます。";
   $("h-payWrap").hidden = !who;
   if (who) {
     const opts = passesFor(who, hold.date).map((p) => ({ v: "pass:" + p.id, label: p.label + "を使う", due: "チケット1回", sub: `残り${p.left}回 ・ 期限 ${fmtShort(p.expires_on)}` }))
@@ -343,7 +366,17 @@ $("h-pays").addEventListener("change", (e) => { if (e.target.name === "hpay") ho
 $("hold").addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!hold.times.length) return;
-  const who = $("h-who").value, note = $("h-note").value.trim(), btn = $("h-submit"); btn.disabled = true;
+  let who = $("h-who").value; const note = $("h-note").value.trim(), btn = $("h-submit");
+  let created = null;
+  if (who === "__new") {
+    const name = $("h-newName").value.trim(), contact = $("h-newContact").value.trim();
+    if (!name || !contact) { toast("新しいお客さんのお名前と連絡先を入力してください"); return; }
+    btn.disabled = true;
+    const r = await sb.rpc("admin_add_customer", { p_name: name, p_contact: contact, p_goal: null, p_health: null });
+    if (r.error) { btn.disabled = false; toast(errText(r.error, "お客さんを登録できませんでした。もう一度お試しください。")); return; }
+    created = { ...r.data, name }; who = r.data.id;
+  }
+  btn.disabled = true;
   let ok = 0; const fails = [];
   try {
     if (!who) {
@@ -361,8 +394,9 @@ $("hold").addEventListener("submit", async (e) => {
         else ok++;
       }
     }
-    const c = customers.find((x) => x.id === who);
+    const c = created || customers.find((x) => x.id === who);
     if (ok) toast(`${fmtDate(hold.date)}の${ok}枠を${who ? (c ? c.name + "さんの予約として入れました" : "予約として入れました") : "押さえました"}`);
+    if (created) { await loadAll(); showNewCustomer(created); showTab("cust"); }
     if (fails.length) banner("入れられなかった時間があります：" + fails.join("、"), true); else banner("");
     if (!fails.length) closeHold();
   } catch (err) {
@@ -445,6 +479,30 @@ $("k-list").addEventListener("click", async (e) => { const b = e.target.closest(
   if (b.dataset.kdstop) { apending.delete("K" + b.dataset.kdstop); renderKarte(); return; }
   if (b.dataset.kdgo) { b.disabled = true; const { error } = await sb.from("session_notes").delete().eq("id", b.dataset.kdgo);
     apending.delete("K" + b.dataset.kdgo); toast(error ? "削除できませんでした。" : "記録を削除しました"); if (kst.editId === b.dataset.kdgo) resetNoteForm(); await loadAll(); }
+});
+
+/* ---------- お客さんを登録 ---------- */
+let ncLast = null;
+function showNewCustomer(c) {
+  ncLast = c; $("nc").hidden = true; $("nc-open").hidden = true; $("nc-done").hidden = false;
+  $("nc-doneTitle").textContent = c.name + " さんを登録しました"; $("nc-url").value = myPageUrl(c.token);
+}
+$("nc-open").addEventListener("click", () => { $("nc").hidden = false; $("nc-open").hidden = true; $("nc-done").hidden = true; ["nc-name", "nc-contact", "nc-goal", "nc-health"].forEach((id) => ($(id).value = "")); $("nc-name").focus(); });
+$("nc-cancel").addEventListener("click", () => { $("nc").hidden = true; $("nc-open").hidden = false; });
+$("nc-close").addEventListener("click", () => { $("nc-done").hidden = true; $("nc-open").hidden = false; });
+$("nc-copy").addEventListener("click", () => copy($("nc-url").value, $("nc-url")));
+$("nc-book").addEventListener("click", () => { if (!ncLast) return; showTab("admin"); openHold({ customer: ncLast.id, pickCustomer: true }); $("nc-done").hidden = true; $("nc-open").hidden = false; });
+$("nc").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const name = $("nc-name").value.trim(), contact = $("nc-contact").value.trim();
+  if (!name || !contact) { toast("お名前と連絡先を入力してください"); return; }
+  if (customers.some((c) => c.contact.replace(/[-\s]/g, "") === contact.replace(/[-\s]/g, "")) && !$("nc-submit").dataset.sure) {
+    $("nc-submit").dataset.sure = "1"; $("nc-submit").textContent = "同じ連絡先の人がいます。それでも登録する"; return; }
+  const btn = $("nc-submit"); btn.disabled = true;
+  const { data, error } = await sb.rpc("admin_add_customer", { p_name: name, p_contact: contact, p_goal: $("nc-goal").value, p_health: $("nc-health").value });
+  btn.disabled = false; delete btn.dataset.sure; btn.textContent = "登録する";
+  if (error) { toast(errText(error, "登録できませんでした。もう一度お試しください。")); return; }
+  await loadAll(); showNewCustomer({ ...data, name });
 });
 
 /* ---------- お客さん ---------- */
