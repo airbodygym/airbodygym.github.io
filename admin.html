@@ -174,7 +174,7 @@ $("login").addEventListener("submit", async (e) => {
       const { data, error } = await sb.auth.signUp({ email, password, options: { emailRedirectTo: location.origin + location.pathname } });
       if (error) throw error;
       if (data.session) await enter();
-      else banner("確認メールを送りました。メールのリンクを押してから、ここでログインしてください。");
+      else banner("確認メールを送りました。メールのリンクを押してから、ここでログインしてください。送り主は noreply@mail.app.supabase.io です。届かないときは迷惑メールフォルダも見てください。新規登録を何度も押すと送れなくなるので、押すのは1回だけにしてください。");
     } else {
       const { error } = await sb.auth.signInWithPassword({ email, password });
       if (error) throw error;
@@ -182,7 +182,12 @@ $("login").addEventListener("submit", async (e) => {
     }
   } catch (err) {
     const m = (err && err.message) || "";
-    banner(m.includes("Invalid login") ? "メールアドレスかパスワードが違います。" : m.includes("Email not confirmed") ? "確認メールのリンクをまだ押していないようです。メールを確認してください。" : m.includes("already registered") ? "このメールアドレスは登録済みです。ログインしてください。" : "うまくいきませんでした：" + m, true);
+    const MAIL = "送り主は noreply@mail.app.supabase.io、件名は「Confirm Your Signup」です。届いていなければ迷惑メールフォルダも見てください。";
+    banner(m.includes("Invalid login") ? "メールアドレスかパスワードが違います。"
+      : m.includes("Email not confirmed") ? "まだ確認メールのリンクが押されていません。メールのリンクを押してから、もう一度ログインしてください。" + MAIL
+      : m.includes("already registered") ? "このメールアドレスは登録済みです。「ログインに戻る」からログインしてください。"
+      : m.includes("rate limit") ? "確認メールを短い時間に何回も送ったため、いまは送れません。新規登録はもう押さずに、すでに届いている確認メールを探してください。" + MAIL + "見つからなければオーナーに連絡してください。"
+      : "うまくいきませんでした：" + m, true);
   } finally { $("loginBtn").disabled = false; }
 });
 $("logout").addEventListener("click", async () => { await sb.auth.signOut(); location.reload(); });
