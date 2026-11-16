@@ -539,6 +539,28 @@ $("nc").addEventListener("submit", async (e) => {
 });
 
 /* ---------- お客さん ---------- */
+let editPass = null;
+function passCounts(p) {
+  const us = usage.filter((u) => u.pass_id === p.id), settled = us.filter((u) => u.status).length, held = us.length - settled;
+  const total = p.sessions + p.bonus, used = settled + (p.carried_used || 0);
+  return { total, settled, held, used, left: total - used - held };
+}
+function passRowHtml(p) {
+  const k = passCounts(p), expired = today() > p.expires_on;
+  const head = `<span>${esc(p.label)}${expired ? ' <span class="pill warn">期限切れ</span>' : ""}</span>`;
+  if (editPass !== p.id) return `<div class="mini">${head}<span class="hd-r"><span><b style="font-family:var(--mono)">${k.left}</b>/${k.total}回 ・ 期限 ${fmtShort(p.expires_on)}</span>${role === "owner" ? `<button type="button" class="btn sm ghost" data-pedit="${p.id}">直す</button>` : ""}</span></div>`;
+  return `<div class="passedit">
+    <div class="hd"><b>${esc(p.label)}を直す</b><span class="sm">全${k.total}回</span></div>
+    <div class="row">
+      <div class="field"><label for="pe-used-${p.id}">使った回数</label><input type="number" id="pe-used-${p.id}" min="${k.settled}" max="${k.total - k.held}" value="${k.used}" inputmode="numeric" data-pused="${p.id}"></div>
+      <div class="field"><label for="pe-exp-${p.id}">有効期限</label><input type="date" id="pe-exp-${p.id}" min="${p.starts_on}" value="${p.expires_on}"></div>
+    </div>
+    <p class="sub" id="pe-calc-${p.id}" style="margin:0">${passCalcText(k, k.used)}</p>
+    <p class="sub" style="margin:0">受講済み・当日キャンセルとしてこの画面で記録した${k.settled}回より少なくはできません。予約中の${k.held}回は予約から自動で数えます。</p>
+    <div class="row"><button type="button" class="btn sm ghost" data-pcancel="${p.id}">やめる</button><button type="button" class="btn sm" data-psave="${p.id}">保存</button></div>
+  </div>`;
+}
+function passCalcText(k, used) { const left = k.total - used - k.held; return `使った${used}回・予約中${k.held}回 → <b>残り${left}回</b>`; }
 let editCust = null; const delStep = new Map();
 function editCustHtml(c, visits) {
   const nb = usage.filter((u) => u.customer_id === c.id).length, np = c.passes.length, nn = notesFor(c.id).length, step = delStep.get(c.id) || 0;
@@ -589,7 +611,7 @@ function renderCust() {
     const visits = usage.filter((u) => u.customer_id === c.id && u.status === "done").length;
     const apps = role !== "owner" ? (c.applications.some((a) => a.status === "pending") ? `<div class="mini"><span><span class="pill warn">申込あり</span>オーナーが確認中</span></div>` : "") : c.applications.filter((a) => a.status === "pending").map((a) => { const pl = plans.find((p) => p.id === a.plan_id) || {}; const k = c.id + "|" + a.id + "|" + a.plan_id;
       return `<div class="mini"><span><span class="pill warn">申込</span>${esc(pl.label)} ${yen(pl.price)}</span><span class="row" style="flex:0 0 auto">${apending.has("A" + k) ? `<button class="btn sm" data-ago="${k}">入金確認済みで有効にする</button><button class="btn sm ghost" data-astop="${k}">やめる</button>` : `<button class="btn sm" data-aask="${k}">有効にする</button><button class="btn sm ghost" data-arej="${esc(a.id)}">取り下げ</button>`}</span></div>`; }).join("");
-    const passes = c.passes.filter((p) => today() <= p.expires_on).map((p) => `<div class="mini"><span>${esc(p.label)}</span><span><b style="font-family:var(--mono)">${passLeft(p)}</b>/${p.sessions + p.bonus}回 ・ 期限 ${fmtShort(p.expires_on)}</span></div>`).join("");
+    const passes = c.passes.filter((p) => role === "owner" || today() <= p.expires_on).sort((a, b) => (a.expires_on < b.expires_on ? 1 : -1)).map(passRowHtml).join("");
     if (editCust === c.id) return editCustHtml(c, visits);
     return `<div class="cust"><div class="hd"><b>${esc(c.name)}</b><span class="hd-r"><span class="sm">受講${visits}回</span><button type="button" class="btn sm ghost" data-cedit="${c.id}">編集</button></span></div><div class="sm">${esc(c.contact)}</div>${apps}${passes}
       ${role !== "owner" ? "" : addPlanHtml(c)}
@@ -598,7 +620,19 @@ function renderCust() {
   }).join("");
 }
 $("c-search").addEventListener("input", renderCust);
+$("custList").addEventListener("input", (e) => { const id = e.target.dataset.pused; if (!id) return;
+  const p = customers.flatMap((c) => c.passes).find((x) => x.id === id); if (!p) return;
+  const k = passCounts(p), v = parseInt(e.target.value, 10); $("pe-calc-" + id).innerHTML = Number.isFinite(v) ? passCalcText(k, v) : ""; });
 $("custList").addEventListener("click", async (e) => { const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.pedit) { editPass = b.dataset.pedit; renderCust(); return; }
+  if (b.dataset.pcancel) { editPass = null; renderCust(); return; }
+  if (b.dataset.psave) { const id = b.dataset.psave, p = customers.flatMap((c) => c.passes).find((x) => x.id === id); if (!p) return;
+    const k = passCounts(p), used = parseInt($("pe-used-" + id).value, 10), exp = $("pe-exp-" + id).value;
+    if (!(used >= k.settled && used <= k.total - k.held)) { toast(`使った回数は${k.settled}〜${k.total - k.held}回で入れてください`); return; }
+    if (!exp) { toast("有効期限を入れてください"); return; }
+    b.disabled = true; const { data, error } = await sb.rpc("admin_adjust_pass", { p_pass: id, p_used: used, p_expires: exp });
+    if (error) { b.disabled = false; toast(String(error.message).includes("BAD_USED") ? `使った回数は${k.settled}〜${k.total - k.held}回で入れてください` : String(error.message).includes("BAD_EXPIRES") ? "有効期限はチケットを使い始めた日より後にしてください" : "保存できませんでした。もう一度お試しください。"); return; }
+    editPass = null; toast(`${p.label}を直しました（残り${data.left}回）`); await loadAll(); return; }
   if (b.dataset.cedit) { editCust = b.dataset.cedit; delStep.delete(editCust); renderCust(); const el = $("ce-name-" + editCust); if (el) el.focus(); return; }
   if (b.dataset.cecancel) { editCust = null; renderCust(); return; }
   if (b.dataset.cesave) { const id = b.dataset.cesave, name = $("ce-name-" + id).value.trim(), contact = $("ce-contact-" + id).value.trim();
@@ -794,7 +828,7 @@ $("tab-settings").addEventListener("submit", async (e) => { e.preventDefault(); 
 (async () => {
   const { data: { session } } = await sb.auth.getSession();
   if (session) await enter(); else $("login").hidden = false;
-  setInterval(() => { if (!document.hidden && !$("app").hidden && !apending.size && !editCust && $("hold").hidden && $("nc").hidden) loadAll(); }, 60000);
+  setInterval(() => { if (!document.hidden && !$("app").hidden && !apending.size && !editCust && !editPass && $("hold").hidden && $("nc").hidden) loadAll(); }, 60000);
 })();
 })();
 </script>
