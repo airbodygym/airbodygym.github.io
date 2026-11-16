@@ -356,7 +356,7 @@ $("doneMine").addEventListener("click", () => showTab("mine"));
 
 /* ---------- マイページ ---------- */
 const pending = new Set();
-const payLabel = (b) => b.pay_type === "pass" ? (b.pass_label || "チケット") : b.pay_type === "trial" ? "初回体験" : "都度払い";
+const payLabel = (b) => b.pay_type === "pass" ? (b.pass_label || "チケット") : b.pay_type === "trial" ? "初回体験" : b.pay_type === "free" ? "サービス（無料）" : "都度払い";
 const canSelfCancel = (b) => today() < b.on_date;
 function passCard(p) {
   const expired = today() > p.expires_on, w = (x) => (p.total ? ((x / p.total) * 100).toFixed(1) + "%" : "0");

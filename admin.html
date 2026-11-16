@@ -240,7 +240,7 @@ $("reload").addEventListener("click", async () => { await loadAll(); toast("最�
 
 /* ---------- 予約一覧 ---------- */
 const endOf = (b) => new Date(startOf(b.on_date, b.start_time).getTime() + settings.slot_minutes * 60000);
-const payLabel = (b) => b.pay_type === "pass" ? ((b.passes && b.passes.label) || "チケット") : b.pay_type === "trial" ? "初回体験" : "都度払い";
+const payLabel = (b) => b.pay_type === "pass" ? ((b.passes && b.passes.label) || "チケット") : b.pay_type === "trial" ? "初回体験" : b.pay_type === "free" ? "サービス（無料）" : "都度払い";
 function outOfShift(b) { const t = trainers.find((x) => x.id === b.trainer_id); return t ? !trainerOpen(t, b.on_date, hm(b.start_time), settings) : false; }
 function rowHtml(b, mode) {
   const ask = (act, label, cls) => { const k = b.id + "|" + act; return apending.has(k) ? `<button class="btn sm ${cls || ""}" data-go="${k}">${label}を確定</button><button class="btn sm ghost" data-stop="${k}">やめる</button>` : `<button class="btn sm ghost" data-ask="${k}">${label}</button>`; };
@@ -310,7 +310,7 @@ $("adminList").addEventListener("click", async (e) => { const b = e.target.close
 });
 
 /* ---------- 時間を押さえる ---------- */
-const hold = { trainer: null, date: null, times: [], pay: null };
+const hold = { trainer: null, date: null, times: [], pay: null, buyPlan: null };
 function slotTimes() { const out = [], L = settings.slot_minutes; for (let m = settings.open_hour * 60; m + L <= settings.close_hour * 60; m += L) out.push(fmtMin(m)); return out; }
 function holdState(tid, date, h) {
   if (startOf(date, h) <= jstNow()) return "past";
@@ -318,6 +318,11 @@ function holdState(tid, date, h) {
   if (blocks.some((x) => x.trainer_id === tid && x.on_date === date && hm(x.start_time) === h)) return "held";
   const t = trainers.find((x) => x.id === tid);
   return t && trainerOpen(t, date, h, settings) ? "free" : "offshift";
+}
+function trialOk(cid) {
+  if (cid === "__new") return true;
+  const c = customers.find((x) => x.id === cid);
+  return !!c && !c.trial_used && !c.passes.length && !usage.some((u) => u.customer_id === cid);
 }
 function passesFor(cid, date) {
   const c = customers.find((x) => x.id === cid); if (!c) return [];
@@ -352,10 +357,17 @@ function renderHold() {
   $("h-whoHint").textContent = who === "__new" ? "お名前と連絡先を入れると、お客さんを登録してから予約を入れます。" : who ? "このお客さんの予約として入ります。お客さんのマイページにも表示されます。" : "名前なしで枠だけ締めます。あとで「お客さんの予約にする」で切り替えられます。";
   $("h-payWrap").hidden = !who;
   if (who) {
-    const opts = passesFor(who, hold.date).map((p) => ({ v: "pass:" + p.id, label: p.label + "を使う", due: "チケット1回", sub: `残り${p.left}回 ・ 期限 ${fmtShort(p.expires_on)}` }))
-      .concat([{ v: "single", label: "都度払い", due: yen(settings.single_price), sub: "1回ごとのお支払い" }]);
+    const sellable = plans.filter((p) => p.active);
+    if (!sellable.some((p) => p.id === hold.buyPlan)) hold.buyPlan = (sellable[0] || {}).id;
+    const bp = sellable.find((p) => p.id === hold.buyPlan);
+    const opts = passesFor(who, hold.date).map((p) => ({ v: "pass:" + p.id, label: p.label + "を使う", due: "チケット1回", sub: `残り${p.left}回 ・ 期限 ${fmtShort(p.expires_on)}` }));
+    if (role === "owner" && bp) opts.push({ v: "buy", label: "回数券・月額プランを買って使う", due: yen(bp.price), sub: "その場でチケットを有効にして、この予約に使います" });
+    if (trialOk(who)) opts.push({ v: "trial", label: "初回体験", due: yen(settings.trial_price), sub: "初めてのお客さん限定・1回だけ" });
+    opts.push({ v: "single", label: "都度払い", due: yen(settings.single_price), sub: "1回ごとのお支払い" });
+    opts.push({ v: "free", label: "サービス（無料）", due: "0円", sub: "お金をもらわずに入れるとき" });
     if (!opts.some((o) => o.v === hold.pay)) hold.pay = opts[0].v;
-    $("h-pays").innerHTML = opts.map((o, i) => `<label class="pay"><input type="radio" name="hpay" id="hpay-${i}" value="${esc(o.v)}" ${o.v === hold.pay ? "checked" : ""}><b>${esc(o.label)}</b><em>${esc(o.due)}</em><span>${esc(o.sub)}</span></label>`).join("");
+    $("h-pays").innerHTML = opts.map((o, i) => `<label class="pay"><input type="radio" name="hpay" id="hpay-${i}" value="${esc(o.v)}" ${o.v === hold.pay ? "checked" : ""}><b>${esc(o.label)}</b><em>${esc(o.due)}</em><span>${esc(o.sub)}</span></label>`
+      + (o.v === "buy" && hold.pay === "buy" ? `<div class="field" style="margin:-2px 0 4px 28px"><label for="h-buyPlan">買うプラン</label><select id="h-buyPlan">${sellable.map((p) => `<option value="${esc(p.id)}" ${p.id === hold.buyPlan ? "selected" : ""}>${esc(p.label)} ${yen(p.price)}</option>`).join("")}</select><small>${bp.sessions + bp.bonus}回分・有効期限${bp.months}か月（今日から）。入金を受け取ってから選んでください。</small></div>` : "")).join("");
     const t = trainers.find((x) => x.id === hold.trainer); $("h-nomFee").textContent = t ? "+" + yen(rankOf(t.rank_id).fee) + "／回（お客さんが指名した場合）" : "";
   }
   $("h-submit").textContent = hold.times.length ? (who ? `${hold.times.length}枠を予約として入れる` : `${hold.times.length}枠を押さえる`) : "時間を選んでください";
@@ -368,7 +380,10 @@ $("h-date").addEventListener("change", () => { hold.date = $("h-date").value; ho
 $("h-times").addEventListener("click", (e) => { const b = e.target.closest("[data-hh]"); if (!b || b.disabled) return; const h = b.dataset.hh;
   hold.times = hold.times.includes(h) ? hold.times.filter((x) => x !== h) : hold.times.concat(h).sort(); renderHold(); });
 $("h-who").addEventListener("change", () => { hold.pay = null; renderHold(); });
-$("h-pays").addEventListener("change", (e) => { if (e.target.name === "hpay") hold.pay = e.target.value; });
+$("h-pays").addEventListener("change", (e) => {
+  if (e.target.name === "hpay") { hold.pay = e.target.value; renderHold(); }
+  if (e.target.id === "h-buyPlan") { hold.buyPlan = e.target.value; renderHold(); }
+});
 $("hold").addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!hold.times.length) return;
@@ -389,11 +404,22 @@ $("hold").addEventListener("submit", async (e) => {
       const { error } = await sb.from("blocks").insert(hold.times.map((h) => ({ trainer_id: hold.trainer, on_date: hold.date, start_time: h, note: note || null })));
       if (error) throw error; ok = hold.times.length;
     } else {
+      let payType = hold.pay.startsWith("pass:") ? "pass" : hold.pay, passId = hold.pay.startsWith("pass:") ? hold.pay.slice(5) : null;
+      if (hold.pay === "trial" && hold.times.length > 1) throw { mine: "初回体験は1枠だけ選んでください。2回目からは都度払いかチケットになります。" };
+      if (hold.pay === "buy") {
+        const bp = plans.find((p) => p.id === hold.buyPlan);
+        if (!bp) throw { mine: "買うプランを選んでください" };
+        if (hold.times.length > bp.sessions + bp.bonus) throw { mine: `${bp.label}は${bp.sessions + bp.bonus}回分です。選んだ枠が多すぎます。` };
+        const g = await sb.rpc("grant_pass", { p_customer: who, p_plan: bp.id, p_application: null });
+        if (g.error) throw { mine: errText(g.error, "チケットを有効にできませんでした。もう一度お試しください。") };
+        payType = "pass"; passId = g.data; hold.pay = "pass:" + passId;
+        toast(bp.label + "を有効にしました");
+      }
       for (const h of hold.times) {
         const held = blocks.find((x) => x.trainer_id === hold.trainer && x.on_date === hold.date && hm(x.start_time) === h);
         if (held) { const r = await sb.from("blocks").delete().eq("id", held.id); if (r.error) { fails.push(h); continue; } }
         const { error } = await sb.rpc("admin_book", { p_customer: who, p_trainer: hold.trainer, p_date: hold.date, p_time: h,
-          p_pay: hold.pay.startsWith("pass:") ? "pass" : "single", p_pass: hold.pay.startsWith("pass:") ? hold.pay.slice(5) : null,
+          p_pay: payType, p_pass: passId,
           p_nominated: $("h-nom").checked, p_note: note });
         if (error) { fails.push(h + "（" + errText(error, "保存できませんでした") + "）");
           if (held) await sb.from("blocks").insert({ trainer_id: held.trainer_id, on_date: held.on_date, start_time: held.start_time, note: held.note }); }
@@ -406,7 +432,7 @@ $("hold").addEventListener("submit", async (e) => {
     if (fails.length) banner("入れられなかった時間があります：" + fails.join("、"), true); else banner("");
     if (!fails.length) closeHold();
   } catch (err) {
-    toast(String((err && err.message) || "").includes("duplicate") ? "その時間はすでに押さえ済みか予約が入っています。" : "保存できませんでした。もう一度お試しください。");
+    toast(err && err.mine ? err.mine : String((err && err.message) || "").includes("duplicate") ? "その時間はすでに押さえ済みか予約が入っています。" : "保存できませんでした。もう一度お試しください。");
   } finally { btn.disabled = false; }
   await loadAll();
 });
