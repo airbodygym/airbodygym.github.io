@@ -558,7 +558,15 @@ function passRowHtml(p) {
     <p class="sub" id="pe-calc-${p.id}" style="margin:0">${passCalcText(k, k.used)}</p>
     <p class="sub" style="margin:0">受講済み・当日キャンセルとしてこの画面で記録した${k.settled}回より少なくはできません。予約中の${k.held}回は予約から自動で数えます。</p>
     <div class="row"><button type="button" class="btn sm ghost" data-pcancel="${p.id}">やめる</button><button type="button" class="btn sm" data-psave="${p.id}">保存</button></div>
+    ${passDelHtml(p, k)}
   </div>`;
+}
+const passDel = new Set();
+function passDelHtml(p, k) {
+  if (k.held) return `<p class="sub" style="margin:0">このチケットを使う予約が${k.held}件あるので、削除できません。削除するときは、先にその予約を取り消すか、お支払いを変えてください。</p>`;
+  if (!passDel.has(p.id)) return `<button type="button" class="btn sm ghost danger-text" data-pdel="${p.id}">このチケットを削除</button>`;
+  return `<div class="note warn" style="margin:0">本当に${esc(p.label)}を削除しますか？ 元に戻せません。${k.settled ? `受講済みの${k.settled}回は履歴として残ります。` : ""}</div>
+    <div class="row"><button type="button" class="btn sm ghost" data-pdelstop="${p.id}">やめる</button><button type="button" class="btn sm danger" data-pdelgo="${p.id}">削除する</button></div>`;
 }
 function passCalcText(k, used) { const left = k.total - used - k.held; return `使った${used}回・予約中${k.held}回 → <b>残り${left}回</b>`; }
 let editCust = null; const delStep = new Map();
@@ -624,7 +632,13 @@ $("custList").addEventListener("input", (e) => { const id = e.target.dataset.pus
   const p = customers.flatMap((c) => c.passes).find((x) => x.id === id); if (!p) return;
   const k = passCounts(p), v = parseInt(e.target.value, 10); $("pe-calc-" + id).innerHTML = Number.isFinite(v) ? passCalcText(k, v) : ""; });
 $("custList").addEventListener("click", async (e) => { const b = e.target.closest("button"); if (!b) return;
-  if (b.dataset.pedit) { editPass = b.dataset.pedit; renderCust(); return; }
+  if (b.dataset.pedit) { editPass = b.dataset.pedit; passDel.clear(); renderCust(); return; }
+  if (b.dataset.pdel) { passDel.add(b.dataset.pdel); renderCust(); return; }
+  if (b.dataset.pdelstop) { passDel.delete(b.dataset.pdelstop); renderCust(); return; }
+  if (b.dataset.pdelgo) { const id = b.dataset.pdelgo, p = customers.flatMap((c) => c.passes).find((x) => x.id === id); b.disabled = true;
+    const { error } = await sb.rpc("admin_delete_pass", { p_pass: id });
+    if (error) { b.disabled = false; toast(String(error.message).includes("PASS_IN_USE") ? "このチケットを使う予約があるので削除できません。先に予約を取り消してください。" : "削除できませんでした。もう一度お試しください。"); return; }
+    passDel.delete(id); editPass = null; toast((p ? p.label : "チケット") + "を削除しました"); await loadAll(); return; }
   if (b.dataset.pcancel) { editPass = null; renderCust(); return; }
   if (b.dataset.psave) { const id = b.dataset.psave, p = customers.flatMap((c) => c.passes).find((x) => x.id === id); if (!p) return;
     const k = passCounts(p), used = parseInt($("pe-used-" + id).value, 10), exp = $("pe-exp-" + id).value;
