@@ -539,6 +539,22 @@ $("nc").addEventListener("submit", async (e) => {
 });
 
 /* ---------- お客さん ---------- */
+let editCust = null; const delStep = new Map();
+function editCustHtml(c, visits) {
+  const nb = usage.filter((u) => u.customer_id === c.id).length, np = c.passes.length, nn = notesFor(c.id).length, step = delStep.get(c.id) || 0;
+  const delHtml = role !== "owner" ? "" : step === 0 ? `<button type="button" class="btn sm ghost danger-text" data-cdel="${c.id}">このお客さんを削除</button>`
+    : `<div class="note warn" style="margin:0">本当に削除しますか？ ${esc(c.name)} さんの予約${nb}件・チケット${np}枚・カルテ${nn}件もすべて消え、元に戻せません。マイページURLも使えなくなります。</div>
+       <div class="row"><button type="button" class="btn sm ghost" data-cdelstop="${c.id}">やめる</button><button type="button" class="btn sm danger" data-cdelgo="${c.id}">削除する</button></div>`;
+  return `<div class="cust editing">
+    <div class="hd"><b>お客さんの情報を直す</b><span class="sm">受講${visits}回</span></div>
+    <div class="row">
+      <div class="field"><label for="ce-name-${c.id}">お名前</label><input id="ce-name-${c.id}" value="${esc(c.name)}" autocomplete="off"></div>
+      <div class="field"><label for="ce-contact-${c.id}">電話番号またはメール</label><input id="ce-contact-${c.id}" value="${esc(c.contact)}" autocomplete="off"></div>
+    </div>
+    <div class="row"><button type="button" class="btn sm ghost" data-cecancel="${c.id}">やめる</button><button type="button" class="btn sm" data-cesave="${c.id}">保存</button></div>
+    ${delHtml}
+  </div>`;
+}
 const addOpen = new Map(); // お客さんごとの「プランを追加」の入力状態
 function defaultExpiry(pl) { const d = parseYmd(today()); d.setMonth(d.getMonth() + pl.months); d.setDate(d.getDate() - 1); return ymd(d); }
 function addPlanHtml(c) {
@@ -574,7 +590,8 @@ function renderCust() {
     const apps = role !== "owner" ? (c.applications.some((a) => a.status === "pending") ? `<div class="mini"><span><span class="pill warn">申込あり</span>オーナーが確認中</span></div>` : "") : c.applications.filter((a) => a.status === "pending").map((a) => { const pl = plans.find((p) => p.id === a.plan_id) || {}; const k = c.id + "|" + a.id + "|" + a.plan_id;
       return `<div class="mini"><span><span class="pill warn">申込</span>${esc(pl.label)} ${yen(pl.price)}</span><span class="row" style="flex:0 0 auto">${apending.has("A" + k) ? `<button class="btn sm" data-ago="${k}">入金確認済みで有効にする</button><button class="btn sm ghost" data-astop="${k}">やめる</button>` : `<button class="btn sm" data-aask="${k}">有効にする</button><button class="btn sm ghost" data-arej="${esc(a.id)}">取り下げ</button>`}</span></div>`; }).join("");
     const passes = c.passes.filter((p) => today() <= p.expires_on).map((p) => `<div class="mini"><span>${esc(p.label)}</span><span><b style="font-family:var(--mono)">${passLeft(p)}</b>/${p.sessions + p.bonus}回 ・ 期限 ${fmtShort(p.expires_on)}</span></div>`).join("");
-    return `<div class="cust"><div class="hd"><b>${esc(c.name)}</b><span class="sm">受講${visits}回</span></div><div class="sm">${esc(c.contact)}</div>${apps}${passes}
+    if (editCust === c.id) return editCustHtml(c, visits);
+    return `<div class="cust"><div class="hd"><b>${esc(c.name)}</b><span class="hd-r"><span class="sm">受講${visits}回</span><button type="button" class="btn sm ghost" data-cedit="${c.id}">編集</button></span></div><div class="sm">${esc(c.contact)}</div>${apps}${passes}
       ${role !== "owner" ? "" : addPlanHtml(c)}
       <div class="mini"><span class="sm">マイページURL（お客さんに再送するとき）</span><button class="btn sm ghost" data-url="${esc(c.token)}">コピー</button></div>
       <button class="btn sm" data-karte="${c.id}" style="align-self:flex-start">カルテを開く${notesFor(c.id).length ? "（" + notesFor(c.id).length + "件）" : ""}</button></div>`;
@@ -582,6 +599,19 @@ function renderCust() {
 }
 $("c-search").addEventListener("input", renderCust);
 $("custList").addEventListener("click", async (e) => { const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.cedit) { editCust = b.dataset.cedit; delStep.delete(editCust); renderCust(); const el = $("ce-name-" + editCust); if (el) el.focus(); return; }
+  if (b.dataset.cecancel) { editCust = null; renderCust(); return; }
+  if (b.dataset.cesave) { const id = b.dataset.cesave, name = $("ce-name-" + id).value.trim(), contact = $("ce-contact-" + id).value.trim();
+    if (!name || !contact) { toast("お名前と連絡先を入力してください"); return; }
+    b.disabled = true; const { error } = await sb.rpc("admin_update_customer", { p_customer: id, p_name: name, p_contact: contact });
+    if (error) { b.disabled = false; toast(errText(error, "保存できませんでした。もう一度お試しください。")); return; }
+    editCust = null; toast("お客さんの情報を直しました"); await loadAll(); return; }
+  if (b.dataset.cdel) { delStep.set(b.dataset.cdel, 1); renderCust(); return; }
+  if (b.dataset.cdelstop) { delStep.delete(b.dataset.cdelstop); renderCust(); return; }
+  if (b.dataset.cdelgo) { const id = b.dataset.cdelgo, c = customers.find((x) => x.id === id); b.disabled = true;
+    const { error } = await sb.from("customers").delete().eq("id", id);
+    if (error) { b.disabled = false; toast("削除できませんでした。もう一度お試しください。"); return; }
+    editCust = null; delStep.delete(id); toast((c ? c.name + " さんを" : "") + "削除しました"); await loadAll(); return; }
   if (b.dataset.karte) { openKarte(b.dataset.karte); return; }
   if (b.dataset.url) { copy(myPageUrl(b.dataset.url)); return; }
   if (b.dataset.aask) { apending.add("A" + b.dataset.aask); renderCust(); return; }
@@ -764,7 +794,7 @@ $("tab-settings").addEventListener("submit", async (e) => { e.preventDefault(); 
 (async () => {
   const { data: { session } } = await sb.auth.getSession();
   if (session) await enter(); else $("login").hidden = false;
-  setInterval(() => { if (!document.hidden && !$("app").hidden && !apending.size) loadAll(); }, 60000);
+  setInterval(() => { if (!document.hidden && !$("app").hidden && !apending.size && !editCust && $("hold").hidden && $("nc").hidden) loadAll(); }, 60000);
 })();
 })();
 </script>
