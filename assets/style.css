@@ -258,3 +258,10 @@ body.is-staff .owner-only{display:none!important}
 .pay b{grid-column:2;grid-row:1}
 .pay em{grid-column:3;grid-row:1;text-align:right}
 .pay span{grid-column:2 / -1;grid-row:2}
+.addplan{display:flex;flex-direction:column;gap:8px}
+.carry{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);cursor:pointer}
+.carry input{width:auto}
+/* お客さん欄のボタン文字が薄くならないように */
+.cust .btn.sm{color:var(--accent-ink);font-size:13px}
+.cust .btn.sm.ghost{color:var(--ink)}
+.cust .btn.sm.danger{color:var(--surface)}

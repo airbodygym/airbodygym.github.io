@@ -539,7 +539,30 @@ $("nc").addEventListener("submit", async (e) => {
 });
 
 /* ---------- お客さん ---------- */
-function passLeft(p) { const n = usage.filter((u) => u.pass_id === p.id).length; return p.sessions + p.bonus - n; }
+const addOpen = new Map(); // お客さんごとの「プランを追加」の入力状態
+function defaultExpiry(pl) { const d = parseYmd(today()); d.setMonth(d.getMonth() + pl.months); d.setDate(d.getDate() - 1); return ymd(d); }
+function addPlanHtml(c) {
+  const st = addOpen.get(c.id) || {}, act = plans.filter((p) => p.active);
+  const pl = act.find((p) => p.id === st.plan) || act[0]; if (!pl) return "";
+  const total = pl.sessions + pl.bonus;
+  return `<div class="addplan">
+    <div class="mini" style="border-top:1px dashed var(--line)"><label for="add-${c.id}" class="sm">プランを追加（店頭で支払い済み）</label><span class="row" style="flex:1 1 220px"><select id="add-${c.id}" data-addplan="${c.id}">${act.map((p) => `<option value="${esc(p.id)}" ${p.id === pl.id ? "selected" : ""}>${esc(p.label)} ${yen(p.price)}</option>`).join("")}</select><button class="btn sm ghost" data-add="${c.id}" style="flex:0 0 auto">追加</button></span></div>
+    <label class="carry"><input type="checkbox" id="carry-${c.id}" data-carry="${c.id}" ${st.carry ? "checked" : ""}>使いかけのチケット（紙などで使っていた分）として登録する</label>
+    ${st.carry ? `<div class="row">
+      <div class="field"><label for="left-${c.id}">残り回数（全${total}回中）</label><input type="number" id="left-${c.id}" min="1" max="${total}" inputmode="numeric" value="${st.left || ""}" placeholder="例：3"></div>
+      <div class="field"><label for="exp-${c.id}">有効期限</label><input type="date" id="exp-${c.id}" min="${today()}" value="${st.exp || defaultExpiry(pl)}"></div>
+    </div><p class="sub" style="margin:0">今まで使った回数は「利用済み」として数えます。期限はチケットに書いてある日付にしてください。</p>` : ""}
+  </div>`;
+}
+$("custList").addEventListener("change", (e) => {
+  const t = e.target, cid = t.dataset.carry || t.dataset.addplan; if (!cid) return;
+  const st = addOpen.get(cid) || {};
+  if (t.dataset.carry) st.carry = t.checked;
+  if (t.dataset.addplan) { st.plan = t.value; st.exp = null; }
+  const l = $("left-" + cid), x = $("exp-" + cid); if (l) st.left = l.value; if (x && !t.dataset.addplan) st.exp = x.value;
+  addOpen.set(cid, st); renderCust();
+});
+function passLeft(p) { const n = usage.filter((u) => u.pass_id === p.id).length; return p.sessions + p.bonus - (p.carried_used || 0) - n; }
 function renderCust() {
   const q = ($("c-search").value || "").trim().toLowerCase();
   const list = customers.filter((c) => !q || (c.name + " " + c.contact).toLowerCase().includes(q));
@@ -552,7 +575,7 @@ function renderCust() {
       return `<div class="mini"><span><span class="pill warn">申込</span>${esc(pl.label)} ${yen(pl.price)}</span><span class="row" style="flex:0 0 auto">${apending.has("A" + k) ? `<button class="btn sm" data-ago="${k}">入金確認済みで有効にする</button><button class="btn sm ghost" data-astop="${k}">やめる</button>` : `<button class="btn sm" data-aask="${k}">有効にする</button><button class="btn sm ghost" data-arej="${esc(a.id)}">取り下げ</button>`}</span></div>`; }).join("");
     const passes = c.passes.filter((p) => today() <= p.expires_on).map((p) => `<div class="mini"><span>${esc(p.label)}</span><span><b style="font-family:var(--mono)">${passLeft(p)}</b>/${p.sessions + p.bonus}回 ・ 期限 ${fmtShort(p.expires_on)}</span></div>`).join("");
     return `<div class="cust"><div class="hd"><b>${esc(c.name)}</b><span class="sm">受講${visits}回</span></div><div class="sm">${esc(c.contact)}</div>${apps}${passes}
-      ${role !== "owner" ? "" : `<div class="mini"><label for="add-${c.id}" class="sm">プランを追加（店頭で支払い済み）</label><span class="row" style="flex:1 1 220px"><select id="add-${c.id}">${plans.filter((p) => p.active).map((p) => `<option value="${esc(p.id)}">${esc(p.label)} ${yen(p.price)}</option>`).join("")}</select><button class="btn sm ghost" data-add="${c.id}" style="flex:0 0 auto">追加</button></span></div>`}
+      ${role !== "owner" ? "" : addPlanHtml(c)}
       <div class="mini"><span class="sm">マイページURL（お客さんに再送するとき）</span><button class="btn sm ghost" data-url="${esc(c.token)}">コピー</button></div>
       <button class="btn sm" data-karte="${c.id}" style="align-self:flex-start">カルテを開く${notesFor(c.id).length ? "（" + notesFor(c.id).length + "件）" : ""}</button></div>`;
   }).join("");
@@ -569,9 +592,21 @@ $("custList").addEventListener("click", async (e) => { const b = e.target.closes
   if (b.dataset.arej) { b.disabled = true;
     const { error } = await sb.from("applications").update({ status: "withdrawn", decided_at: new Date().toISOString() }).eq("id", b.dataset.arej);
     toast(error ? "保存できませんでした。" : "申し込みを取り下げました"); await loadAll(); return; }
-  if (b.dataset.add) { const cid = b.dataset.add, plan = $("add-" + cid).value; b.disabled = true;
-    const { error } = await sb.rpc("grant_pass", { p_customer: cid, p_plan: plan, p_application: null });
-    toast(error ? errText(error) : plans.find((p) => p.id === plan).label + "を追加しました"); await loadAll(); }
+  if (b.dataset.add) { const cid = b.dataset.add, plan = $("add-" + cid).value, pl = plans.find((p) => p.id === plan), carry = $("carry-" + cid).checked;
+    let res;
+    if (carry) {
+      const left = parseInt($("left-" + cid).value, 10), exp = $("exp-" + cid).value, total = pl.sessions + pl.bonus;
+      if (!(left >= 1 && left <= total)) { toast(`残り回数は1〜${total}回で入れてください`); return; }
+      if (!exp || exp < today()) { toast("期限は今日以降の日付を入れてください"); return; }
+      b.disabled = true;
+      res = await sb.rpc("grant_pass_existing", { p_customer: cid, p_plan: plan, p_left: left, p_expires: exp });
+      toast(res.error ? errText(res.error, "登録できませんでした。もう一度お試しください。") : `${pl.label}（残り${left}回・期限${fmtShort(exp)}）を登録しました`);
+    } else {
+      b.disabled = true;
+      res = await sb.rpc("grant_pass", { p_customer: cid, p_plan: plan, p_application: null });
+      toast(res.error ? errText(res.error) : pl.label + "を追加しました");
+    }
+    addOpen.delete(cid); await loadAll(); }
 });
 
 /* ---------- 設定 ---------- */
