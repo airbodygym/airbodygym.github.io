@@ -106,7 +106,8 @@
       <div class="sheet" id="nc-done" hidden>
         <h3 id="nc-doneTitle"></h3>
         <p class="sub" style="margin:0">このURLをお客さんに送ると、予約の確認・キャンセルやチケットの残り回数を見られます。LINEなどで送ってください。</p>
-        <div class="urlbox"><input id="nc-url" readonly aria-label="マイページURL"><button class="btn sm" type="button" id="nc-copy">コピー</button></div>
+        <div class="urlbox"><input id="nc-url" readonly aria-label="マイページURL"><button class="btn sm ghost" type="button" id="nc-copy">コピー</button></div>
+        <a class="btn line" id="nc-line" href="#" target="_blank" rel="noopener">LINEで送る</a>
         <div class="row"><button class="btn ghost" type="button" id="nc-karte">カルテを開く</button><button class="btn" type="button" id="nc-book">このお客さんの予約を入れる</button></div>
         <button class="btn ghost sm" type="button" id="nc-close" style="align-self:flex-start">閉じる</button>
       </div>
@@ -518,6 +519,12 @@ let ncLast = null;
 function showNewCustomer(c) {
   ncLast = c; $("nc").hidden = true; $("nc-open").hidden = true; $("nc-done").hidden = false;
   $("nc-doneTitle").textContent = c.name + " さんを登録しました"; $("nc-url").value = myPageUrl(c.token);
+  $("nc-line").href = lineShareUrl(c);
+}
+// お客さんにマイページURLを送るためのLINEの共有リンク（LINEアプリが開き、送り先を選べる）
+function lineShareUrl(c) {
+  const msg = `${c.name}さま\n${(settings && settings.name) || "AIR BODY GYM"}です。あなた専用のマイページです。\n予約の確認・キャンセルや、回数券・月額プランでのご予約はこちらから行えます。\n${myPageUrl(c.token)}\n※ブックマークしておくと便利です。ほかの方には教えないでください。`;
+  return "https://line.me/R/share?text=" + encodeURIComponent(msg);
 }
 $("nc-open").addEventListener("click", () => { $("nc").hidden = false; $("nc-open").hidden = true; $("nc-done").hidden = true; ["nc-name", "nc-contact", "nc-goal", "nc-health"].forEach((id) => ($(id).value = "")); $("nc-name").focus(); });
 $("nc-cancel").addEventListener("click", () => { $("nc").hidden = true; $("nc-open").hidden = false; });
@@ -623,7 +630,7 @@ function renderCust() {
     if (editCust === c.id) return editCustHtml(c, visits);
     return `<div class="cust"><div class="hd"><b>${esc(c.name)}</b><span class="hd-r"><span class="sm">受講${visits}回</span><button type="button" class="btn sm ghost" data-cedit="${c.id}">編集</button></span></div><div class="sm">${esc(c.contact)}</div>${apps}${passes}
       ${role !== "owner" ? "" : addPlanHtml(c)}
-      <div class="mini"><span class="sm">マイページURL（お客さんに再送するとき）</span><button class="btn sm ghost" data-url="${esc(c.token)}">コピー</button></div>
+      <div class="mini"><span class="sm">マイページURL（チケットでの予約や予約の確認に使います）</span><span class="row" style="flex:0 0 auto"><a class="btn sm line" href="${lineShareUrl(c)}" target="_blank" rel="noopener">LINEで送る</a><button class="btn sm ghost" data-url="${esc(c.token)}">コピー</button></span></div>
       <button class="btn sm" data-karte="${c.id}" style="align-self:flex-start">カルテを開く${notesFor(c.id).length ? "（" + notesFor(c.id).length + "件）" : ""}</button></div>`;
   }).join("");
 }

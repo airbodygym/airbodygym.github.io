@@ -270,3 +270,8 @@ body.is-staff .owner-only{display:none!important}
 .cust .btn.sm.danger-text{color:var(--warn);border-color:var(--warn-soft);align-self:flex-start}
 .passedit{border:1px solid var(--accent);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;background:var(--accent-soft)}
 .passedit .hd{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.linkbox{margin-top:8px;border:1px dashed var(--accent);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;background:var(--accent-soft);font-size:14px}
+.linkbox .urlbox input{font-size:14px}
+.btn.line{background:#06C755;color:#fff;box-shadow:none;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
+.btn.line:hover{background:#05A847}
+.cust .btn.sm.line{color:#fff}

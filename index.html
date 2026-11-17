@@ -68,7 +68,12 @@
     </div>
     <form class="sheet" id="form" hidden>
       <div><h3>予約内容の確認</h3><div class="when" id="formWhen"></div></div>
-      <div class="field"><span class="flabel">お支払い方法</span><p class="note warn" id="trialNote" hidden style="margin:0">初回体験はすでにご利用済みのため、通常のトレーニングとしてご予約いただけます。</p><div class="pays" id="pays"></div></div>
+      <div class="field"><span class="flabel">お支払い方法</span><p class="note warn" id="trialNote" hidden style="margin:0">初回体験はすでにご利用済みのため、通常のトレーニングとしてご予約いただけます。</p><div class="pays" id="pays"></div>
+        <div class="linkbox" id="linkBox" hidden>
+          <p style="margin:0">回数券・月額プランは、お店から届いた<b>あなた専用のマイページURL</b>から開くと使えます。届いたURLを長押しでコピーして、下に貼り付けてください。</p>
+          <div class="urlbox"><input id="linkInput" placeholder="https://airbodygym.github.io/?me=…" autocomplete="off" aria-label="マイページURL"><button type="button" class="btn sm" id="linkGo">読み込む</button></div>
+          <p class="sub" style="margin:0">URLが見つからないときは、お店に「マイページURLを送ってください」とご連絡ください。</p>
+        </div></div>
       <div class="lines" id="lines"></div>
       <div class="total"><span>お支払い金額（税込）</span><b id="total">0円</b></div>
       <div class="field"><label for="f-name">お名前</label><input id="f-name" required autocomplete="name" placeholder="山田 花子"></div>
@@ -297,6 +302,7 @@ function payOptions(date) {
   for (const p of (me && me.passes) || []) {
     if (p.left > 0 && date >= p.starts_on && date <= p.expires_on) opts.push({ v: "pass:" + p.id, label: p.label + "を使う", sub: `残り${p.left}回 → ${p.left - 1}回 ・ 期限 ${fmtShort(p.expires_on)}`, due: 0 });
   }
+  if (!opts.length) opts.push({ v: "link", label: "回数券・月額プランを使う", sub: me ? "お持ちのチケットが見つからないときはこちら" : "チケットをお持ちの方はこちら", due: 0, dueText: "チケット" });
   const trialOk = !me || me.trial_eligible;
   if (trialOk && sel.menu !== "personal") opts.push({ v: "trial", label: "初回体験", sub: "初めての方限定", due: settings.trial_price });
   opts.push({ v: "single", label: "都度払い", sub: "1回ごとのお支払い", due: settings.single_price });
@@ -314,13 +320,27 @@ function renderForm() {
   const opts = payOptions(sel.date);
   if (!opts.some((o) => o.v === sel.pay)) sel.pay = opts[0].v;
   $("trialNote").hidden = !(sel.menu === "trial" && me && !me.trial_eligible);
-  $("pays").innerHTML = opts.map((o, i) => `<label class="pay"><input type="radio" name="pay" id="pay-${i}" value="${esc(o.v)}" ${o.v === sel.pay ? "checked" : ""}><b>${esc(o.label)}</b><em>${o.due ? yen(o.due) : "チケット1回"}</em><span>${esc(o.sub)}</span></label>`).join("");
+  $("pays").innerHTML = opts.map((o, i) => `<label class="pay"><input type="radio" name="pay" id="pay-${i}" value="${esc(o.v)}" ${o.v === sel.pay ? "checked" : ""}><b>${esc(o.label)}</b><em>${o.dueText || (o.due ? yen(o.due) : "チケット1回")}</em><span>${esc(o.sub)}</span></label>`).join("");
+  $("linkBox").hidden = sel.pay !== "link";
   const o = opts.find((x) => x.v === sel.pay), fee = nomFee();
   $("lines").innerHTML = `<div><span>${esc(o.label.replace("を使う", ""))}</span><span>${o.due ? yen(o.due) : "0円（チケット使用）"}</span></div>` + (fee ? `<div><span>指名料（${esc(rankOf(trainerById(sel.trainer).rank_id).label)}トレーナー）</span><span>${yen(fee)}</span></div>` : "");
   $("total").textContent = yen(o.due + fee);
   if (me) { if (!$("f-name").value) $("f-name").value = me.name || ""; if (!$("f-phone").value) $("f-phone").value = me.contact || ""; }
 }
 $("pays").addEventListener("change", (e) => { if (e.target.name === "pay") { sel.pay = e.target.value; renderForm(); } });
+$("linkGo").addEventListener("click", async () => {
+  const raw = $("linkInput").value.trim(), m = raw.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+  if (!m) { toast("マイページURLを貼り付けてください（「?me=」のあとに英数字が続くURLです）"); return; }
+  const btn = $("linkGo"); btn.disabled = true;
+  const { data, error } = await sb.rpc("my_page", { p_token: m[0] });
+  btn.disabled = false;
+  if (error || !data) { toast("このURLではお客さんが見つかりませんでした。お店から届いたURLをもう一度確かめてください。"); return; }
+  setToken(m[0]); me = data; $("linkInput").value = ""; sel.pay = null;
+  const keep = { date: sel.date, time: sel.time };
+  renderAll(); sel.date = keep.date; sel.time = keep.time; renderBook();
+  const has = (me.passes || []).some((p) => p.left > 0 && sel.date >= p.starts_on && sel.date <= p.expires_on);
+  toast(has ? me.name + " さまのチケットで予約できます" : me.name + " さまとして読み込みました。この日に使えるチケットはありません。");
+});
 $("formCancel").addEventListener("click", () => { sel.time = null; renderBook(); });
 function renderBook() { if (!settings) return; renderPicked(); renderTrainers(); renderDays(); renderTrainerInfo(); renderBoard(); renderForm(); }
 
@@ -329,6 +349,7 @@ $("form").addEventListener("submit", async (e) => {
   const name = $("f-name").value.trim(), contact = $("f-phone").value.trim(), note = $("f-note").value.trim();
   if (!name || !contact) { toast("お名前と連絡先を入力してください"); return; }
   const date = sel.date, h = sel.time, pay = sel.pay;
+  if (pay === "link") { toast("マイページURLを貼り付けて「読み込む」を押してください。または別のお支払い方法を選んでください。"); return; }
   const btn = $("formSubmit"); btn.disabled = true; btn.textContent = "予約しています…";
   try {
     const { data, error } = await sb.rpc("book", {
