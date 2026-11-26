@@ -132,6 +132,10 @@
         <div id="trEdit" style="display:flex;flex-direction:column;gap:10px;margin-top:6px"></div>
         <button type="button" class="btn ghost sm owner-only" id="trAdd" style="align-self:flex-start">トレーナーを追加</button>
       </div>
+      <div class="field" id="notifyBox"><span class="flabel">予約の通知</span>
+        <small id="nt-lead"></small>
+        <div id="nt-body" style="display:flex;flex-direction:column;gap:10px;margin-top:6px"></div>
+      </div>
       <div class="field owner-only"><span class="flabel">管理画面を使える人</span>
         <small>トレーナーのメールアドレスを登録すると、そのアドレスで新規登録した人が管理画面に入れます。トレーナーができるのは、予約一覧・受講の記録・時間の押さえ・カルテ・自分のシフトの変更だけです。料金やジムの設定、チケットの有効化はオーナーだけができます。</small>
         <div class="list" id="staffList" style="margin-top:6px"></div>
@@ -800,7 +804,70 @@ function fillSettingsForm() {
   $("s-closed").value = (settings.closed_dates || []).join(", "); $("s-ahead").value = settings.days_ahead;
   trEdit = trainers.filter((t) => t.active).map((t) => { const ws = weekSchedule(t, settings), sc = {}; for (let d = 0; d < 7; d++) sc[d] = ws[String(d)] || null; const ds = { ...(t.day_shifts || {}) }; for (const d of t.off_dates || []) if (!(d in ds)) ds[d] = null; return { ...t, key: t.id, schedule: sc, day_shifts: ds }; });
   if (role === "staff") trEdit = trEdit.filter((t) => t.id === myTrainer);
-  renderTrEdit(); renderStaff();
+  renderTrEdit(); renderStaff(); renderNotify();
+}
+
+/* ---------- 予約の通知 ---------- */
+let nt = null;
+async function renderNotify() {
+  $("nt-lead").textContent = role === "owner"
+    ? "お客さんが予約・キャンセル・チケットの申し込みをしたら、LINEとメールでお知らせします（管理画面から入れた予約は知らせません）。トレーナーには、その人が担当の予約だけ届きます。"
+    : "お客さんがあなたの担当の予約を入れたり、キャンセルしたりしたら、LINEとメールでお知らせします。";
+  const { data, error } = await sb.rpc("my_notify");
+  if (error) { $("nt-body").innerHTML = `<p class="note" style="margin:0">通知の設定を読み込めませんでした。ページを開き直してください。</p>`; return; }
+  nt = data;
+  const url = settings.notify_line_url || "";
+  const lineStep = nt.linked
+    ? `<div class="mini"><span>LINE：<b>つながっています</b></span><span style="display:flex;align-items:center;gap:8px"><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="nt-line-on" ${nt.line_on ? "checked" : ""}>受け取る</label><button type="button" class="btn sm ghost" id="nt-unlink">解除</button></span></div>`
+    : `<div class="mini" style="flex-direction:column;align-items:stretch;gap:6px">
+        <span>LINE：まだつながっていません</span>
+        ${url ? `<small>① 通知用のLINEを友だち追加する　② そのトークに下の6けたの数字を送る（30分で変わります）</small>
+          <div class="row" style="align-items:center"><b style="font-family:var(--mono);font-size:1.4em;letter-spacing:.15em">${esc(nt.code || "")}</b>
+          <button type="button" class="btn sm ghost" id="nt-copy">数字をコピー</button><a class="btn sm line" href="${esc(url)}" target="_blank" rel="noopener">友だち追加</a></div>`
+          : `<small>${role === "owner" ? "下の「通知用LINEの友だち追加URL」を入れると、ここに手順が出ます。" : "オーナーが通知用LINEを準備中です。準備ができたら、ここに手順が出ます。"}</small>`}
+      </div>`;
+  $("nt-body").innerHTML = `${lineStep}
+    <div class="field"><label for="nt-email">通知を受け取るメールアドレス</label><input id="nt-email" type="email" value="${esc(nt.email || "")}" autocomplete="off">
+      <label style="display:flex;gap:6px;align-items:center;margin-top:4px"><input type="checkbox" id="nt-email-on" ${nt.email_on ? "checked" : ""}>メールでも受け取る</label></div>
+    ${role === "owner" ? `<div class="field"><label for="nt-url">通知用LINEの友だち追加URL</label><input id="nt-url" value="${esc(url)}" placeholder="https://lin.ee/xxxxxxx" autocomplete="off"><small>スタッフ専用のLINE公式アカウントのURLです（お客さん用のアカウントとは別にしてください）。</small></div>` : ""}
+    <div class="row"><button type="button" class="btn sm" id="nt-save">通知の設定を保存</button><button type="button" class="btn sm ghost" id="nt-test">自分にテスト通知を送る</button></div>
+    <small id="nt-result"></small>`;
+  $("nt-email").addEventListener("keydown", (e) => { if (e.key === "Enter") e.preventDefault(); });
+  if ($("nt-url")) $("nt-url").addEventListener("keydown", (e) => { if (e.key === "Enter") e.preventDefault(); });
+  if ($("nt-copy")) $("nt-copy").addEventListener("click", () => copy(nt.code));
+  if ($("nt-unlink")) $("nt-unlink").addEventListener("click", async () => {
+    const { error } = await sb.rpc("unlink_my_line");
+    if (error) { toast("解除できませんでした。もう一度お試しください。"); return; }
+    toast("LINEの通知を解除しました"); renderNotify();
+  });
+  $("nt-save").addEventListener("click", async (e) => {
+    const b = e.currentTarget; b.disabled = true;
+    try {
+      if (role === "owner") {
+        const u = $("nt-url").value.trim();
+        if (u && !/^https:\/\/(lin\.ee|line\.me|page\.line\.me)\//.test(u)) { toast("友だち追加URLは https://lin.ee/… の形で入れてください"); return; }
+        const s = await sb.from("settings").update({ notify_line_url: u || null }).eq("id", 1);
+        if (s.error) throw s.error;
+        settings.notify_line_url = u || null;
+      }
+      const { error } = await sb.rpc("set_my_notify", { p_email: $("nt-email").value, p_email_on: $("nt-email-on").checked, p_line_on: $("nt-line-on") ? $("nt-line-on").checked : true });
+      if (error) { toast(String(error.message).includes("BAD_EMAIL") ? "メールアドレスの形が正しくありません" : "保存できませんでした。もう一度お試しください。"); return; }
+      toast("通知の設定を保存しました"); renderNotify();
+    } catch (err) { toast("保存できませんでした。もう一度お試しください。"); }
+    finally { b.disabled = false; }
+  });
+  $("nt-test").addEventListener("click", async (e) => {
+    const b = e.currentTarget; b.disabled = true; $("nt-result").textContent = "送っています…";
+    const { error } = await sb.rpc("notify_test");
+    if (error) { b.disabled = false; $("nt-result").textContent = String(error.message).includes("TOO_MANY") ? "続けて送りすぎです。1分ほど待ってください。" : "送れませんでした。もう一度お試しください。"; return; }
+    let r = null;
+    for (let i = 0; i < 8 && !(r && r.result); i++) { await new Promise((ok) => setTimeout(ok, 1500)); r = (await sb.rpc("my_last_test")).data; }
+    b.disabled = false;
+    const res = (r && r.result) || null;
+    if (!res) { $("nt-result").textContent = "結果がまだ分かりません。LINEとメールを見てみてください。"; return; }
+    const parts = Object.entries(res).map(([k, v]) => `${k.startsWith("line") ? "LINE" : "メール"}：${v === "ok" ? "送りました" : v.includes("未設定") ? "まだ準備中です" : "送れませんでした（" + v + "）"}`);
+    $("nt-result").textContent = parts.length ? parts.join("　") : "送る先がありません。LINEをつなぐか、メールを受け取るにしてください。";
+  });
 }
 $("tab-settings").addEventListener("submit", async (e) => { e.preventDefault(); syncTr();
   const open_hour = +$("s-open").value, close_hour = +$("s-close").value, slot_minutes = +$("s-len").value;
