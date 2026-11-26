@@ -4,9 +4,16 @@ import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import nodemailer from "npm:nodemailer@6.9.14";
 
 const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-const LINE_TOKEN = Deno.env.get("LINE_CHANNEL_ACCESS_TOKEN") || "";
-const GMAIL_USER = Deno.env.get("GMAIL_USER") || "";
-const GMAIL_PASS = (Deno.env.get("GMAIL_APP_PASSWORD") || "").replace(/\s+/g, "");
+// 鍵は管理画面（オーナー）で入れたもの（notify_secrets）か、Supabase の Secrets
+let LINE_TOKEN = "", GMAIL_USER = "", GMAIL_PASS = "";
+async function loadKeys() {
+  const { data } = await sb.from("notify_secrets").select("key,value");
+  const k: Record<string, string> = Object.fromEntries((data || []).map((r: any) => [r.key, r.value]));
+  const get = (n: string) => k[n] || Deno.env.get(n) || "";
+  const pass = get("GMAIL_APP_PASSWORD").replace(/\s+/g, "");
+  if (get("GMAIL_USER") !== GMAIL_USER || pass !== GMAIL_PASS) mailer = null;
+  LINE_TOKEN = get("LINE_CHANNEL_ACCESS_TOKEN"); GMAIL_USER = get("GMAIL_USER"); GMAIL_PASS = pass;
+}
 const ADMIN_URL = "https://airbodygym.github.io/admin.html";
 const WD = ["日", "月", "火", "水", "木", "金", "土"];
 
@@ -77,6 +84,7 @@ Deno.serve(async (req) => {
   if (error) return new Response(error.message, { status: 500 });
   if (!data) return new Response("already");
 
+  await loadKeys();
   const p = data.payload as P;
   const { subject, text } = compose(data.kind, p);
   const seenLine = new Set<string>(), seenMail = new Set<string>();

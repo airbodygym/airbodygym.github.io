@@ -3,8 +3,13 @@
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
 const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-const SECRET = Deno.env.get("LINE_CHANNEL_SECRET") || "";
-const TOKEN = Deno.env.get("LINE_CHANNEL_ACCESS_TOKEN") || "";
+let SECRET = "", TOKEN = "";
+async function loadKeys() {
+  const { data } = await sb.from("notify_secrets").select("key,value").in("key", ["LINE_CHANNEL_SECRET", "LINE_CHANNEL_ACCESS_TOKEN"]);
+  const k: Record<string, string> = Object.fromEntries((data || []).map((r: any) => [r.key, r.value]));
+  SECRET = k.LINE_CHANNEL_SECRET || Deno.env.get("LINE_CHANNEL_SECRET") || "";
+  TOKEN = k.LINE_CHANNEL_ACCESS_TOKEN || Deno.env.get("LINE_CHANNEL_ACCESS_TOKEN") || "";
+}
 const HOWTO = "予約の通知を受け取るには、管理画面の「設定」（トレーナーは「自分のシフト」）の「予約の通知」に出ている6けたの数字を、このトークに送ってください。";
 
 async function validSignature(body: string, sig: string | null) {
@@ -30,6 +35,7 @@ async function reply(token: string, text: string) {
 Deno.serve(async (req) => {
   if (req.method !== "POST") return new Response("ok");
   const body = await req.text();
+  await loadKeys();
   if (!(await validSignature(body, req.headers.get("x-line-signature")))) return new Response("bad signature", { status: 401 });
 
   let events: any[] = [];

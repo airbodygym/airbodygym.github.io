@@ -816,6 +816,12 @@ async function renderNotify() {
   const { data, error } = await sb.rpc("my_notify");
   if (error) { $("nt-body").innerHTML = `<p class="note" style="margin:0">通知の設定を読み込めませんでした。ページを開き直してください。</p>`; return; }
   nt = data;
+  const KEYS = [["LINE_CHANNEL_ACCESS_TOKEN", "LINEのチャネルアクセストークン（長期）", "LINE Developers の「Messaging API設定」タブ"],
+    ["LINE_CHANNEL_SECRET", "LINEのチャネルシークレット", "LINE Developers の「チャネル基本設定」タブ"],
+    ["GMAIL_USER", "通知を送るGmailアドレス", "example@gmail.com"],
+    ["GMAIL_APP_PASSWORD", "Gmailのアプリパスワード（16文字）", "Googleアカウントで作ったアプリパスワード"]];
+  const ks = role === "owner" ? ((await sb.rpc("notify_secret_status")).data || {}) : {};
+  const keysMissing = KEYS.some(([k]) => !ks[k]);
   const url = settings.notify_line_url || "";
   const lineStep = nt.linked
     ? `<div class="mini"><span>LINE：<b>つながっています</b></span><span style="display:flex;align-items:center;gap:8px"><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="nt-line-on" ${nt.line_on ? "checked" : ""}>受け取る</label><button type="button" class="btn sm ghost" id="nt-unlink">解除</button></span></div>`
@@ -830,10 +836,25 @@ async function renderNotify() {
     <div class="field"><label for="nt-email">通知を受け取るメールアドレス</label><input id="nt-email" type="email" value="${esc(nt.email || "")}" autocomplete="off">
       <label style="display:flex;gap:6px;align-items:center;margin-top:4px"><input type="checkbox" id="nt-email-on" ${nt.email_on ? "checked" : ""}>メールでも受け取る</label></div>
     ${role === "owner" ? `<div class="field"><label for="nt-url">通知用LINEの友だち追加URL</label><input id="nt-url" value="${esc(url)}" placeholder="https://lin.ee/xxxxxxx" autocomplete="off"><small>スタッフ専用のLINE公式アカウントのURLです（お客さん用のアカウントとは別にしてください）。</small></div>` : ""}
+    ${role === "owner" ? `<details class="mini" style="display:block" ${keysMissing ? "open" : ""}><summary style="cursor:pointer">通知の鍵（オーナーだけ）${keysMissing ? "：まだ入っていないものがあります" : "：すべて入っています"}</summary>
+      <small style="display:block;margin:6px 0">入れた鍵はこの画面には二度と表示されません。変えるときだけ、新しいものを貼って保存してください。</small>
+      ${KEYS.map(([k, label, hint]) => `<div class="field"><label for="nk-${k}">${label} ${ks[k] ? "<b>✓ 入っています</b>" : "（未入力）"}</label><input id="nk-${k}" ${k === "GMAIL_USER" ? 'type="email"' : 'type="password"'} autocomplete="off" placeholder="${ks[k] ? "変えるときだけ入力" : hint}"></div>`).join("")}
+      <button type="button" class="btn sm" id="nk-save">鍵を保存</button></details>` : ""}
     <div class="row"><button type="button" class="btn sm" id="nt-save">通知の設定を保存</button><button type="button" class="btn sm ghost" id="nt-test">自分にテスト通知を送る</button></div>
     <small id="nt-result"></small>`;
   $("nt-email").addEventListener("keydown", (e) => { if (e.key === "Enter") e.preventDefault(); });
   if ($("nt-url")) $("nt-url").addEventListener("keydown", (e) => { if (e.key === "Enter") e.preventDefault(); });
+  if ($("nk-save")) $("nk-save").addEventListener("click", async (e) => {
+    const b = e.currentTarget, todo = KEYS.map(([k]) => [k, $("nk-" + k).value.trim()]).filter(([, v]) => v);
+    if (!todo.length) { toast("入れ直したい鍵を貼ってから保存してください"); return; }
+    b.disabled = true;
+    for (const [k, v] of todo) {
+      const { error } = await sb.rpc("set_notify_secret", { p_key: k, p_value: v });
+      if (error) { b.disabled = false; toast("鍵を保存できませんでした。もう一度お試しください。"); return; }
+    }
+    b.disabled = false; toast("鍵を保存しました"); renderNotify();
+  });
+  KEYS.forEach(([k]) => $("nk-" + k) && $("nk-" + k).addEventListener("keydown", (e) => { if (e.key === "Enter") e.preventDefault(); }));
   if ($("nt-copy")) $("nt-copy").addEventListener("click", () => copy(nt.code));
   if ($("nt-unlink")) $("nt-unlink").addEventListener("click", async () => {
     const { error } = await sb.rpc("unlink_my_line");
